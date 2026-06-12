@@ -17,8 +17,8 @@ const createToken = (user) => {
 
 const register = async (req, res) => {
   try {
-    const { firstName, lastName, rut, birth_date, email, password, avatar } =
-      req.body;
+    const { firstName, lastName, rut, birth_date, email, password } = req.body;
+    const avatar = req.file ? req.file.path : null;
 
     if (!firstName || !lastName || !email || !password) {
       return res.status(400).json({
@@ -187,13 +187,26 @@ const updateMe = async (req, res) => {
   try {
     const user_id = req.user.id;
 
-    const { firstName, lastName, rut, birth_date, avatar } = req.body;
+    const { firstName, lastName, rut, birth_date } = req.body;
 
     if (!firstName || !lastName) {
       return res.status(400).json({
         message: "Nombre y apellido son obligatorios",
       });
     }
+
+    const currentUser = await pool.query(
+      `
+      SELECT avatar
+      FROM "FloFlo"."user"
+      WHERE id = $1
+      `,
+      [user_id],
+    );
+
+    const currentAvatar = currentUser.rows[0]?.avatar || null;
+
+    const avatar = req.file ? req.file.path : currentAvatar;
 
     const result = await pool.query(
       `
@@ -208,14 +221,7 @@ const updateMe = async (req, res) => {
       WHERE id = $6
       RETURNING id, "firstName", "lastName", rut, birth_date, email, avatar, created_at
       `,
-      [
-        firstName,
-        lastName,
-        rut || null,
-        birth_date || null,
-        avatar || null,
-        user_id,
-      ],
+      [firstName, lastName, rut || null, birth_date || null, avatar, user_id],
     );
 
     res.json(result.rows[0]);
