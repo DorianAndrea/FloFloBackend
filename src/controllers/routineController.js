@@ -14,10 +14,11 @@ const getRoutines = async (req, res) => {
 
     res.json(result.rows);
   } catch (error) {
-    console.error(error);
+    console.error("❌ Error obteniendo rutinas:", error.message);
 
     res.status(500).json({
       message: "Error obteniendo rutinas",
+      error: error.message,
     });
   }
 };
