@@ -8,7 +8,7 @@ const getRoutines = async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT * 
-      FROM "FloFlo".routine 
+      FROM "FloFlo"."routine" 
       ORDER BY start_time ASC;
     `);
 
