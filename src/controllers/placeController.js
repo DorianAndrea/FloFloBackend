@@ -150,7 +150,7 @@ const updatePlace = async (req, res) => {
     }
 
     const currentImage = currentPlace.rows[0].image;
-    const image = req.file ? req.file.path : currentImage;
+    const image = req.file ? req.file.path : null;
 
     const result = await pool.query(
       `
