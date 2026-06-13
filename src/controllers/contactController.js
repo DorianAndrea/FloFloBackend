@@ -23,7 +23,7 @@ const getContacts = async (req, res) => {
       WHERE uc.user_id = $1
       ORDER BY uc.name
       `,
-      [user_id]
+      [user_id],
     );
 
     res.json(result.rows);
@@ -51,7 +51,7 @@ const getContactById = async (req, res) => {
       WHERE uc.id = $1
       AND uc.user_id = $2
       `,
-      [id, user_id]
+      [id, user_id],
     );
 
     if (result.rows.length === 0) {
@@ -73,12 +73,7 @@ const createContact = async (req, res) => {
   try {
     const user_id = req.user.id;
 
-    const {
-      name,
-      relationship_type_id,
-      where_met,
-      memory_note,
-    } = req.body;
+    const { name, relationship_type_id, where_met, memory_note } = req.body;
 
     const image = req.file ? req.file.path : null;
 
@@ -108,7 +103,7 @@ const createContact = async (req, res) => {
       )
       RETURNING *
       `,
-      [user_id, name, relationship_type_id, where_met, image, memory_note]
+      [user_id, name, relationship_type_id, where_met, image, memory_note],
     );
 
     res.status(201).json(result.rows[0]);
@@ -126,12 +121,7 @@ const updateContact = async (req, res) => {
     const { id } = req.params;
     const user_id = req.user.id;
 
-    const {
-      name,
-      relationship_type_id,
-      where_met,
-      memory_note,
-    } = req.body;
+    const { name, relationship_type_id, where_met, memory_note } = req.body;
 
     const currentContact = await pool.query(
       `
@@ -140,7 +130,7 @@ const updateContact = async (req, res) => {
       WHERE id = $1
       AND user_id = $2
       `,
-      [id, user_id]
+      [id, user_id],
     );
 
     if (currentContact.rows.length === 0) {
@@ -149,6 +139,7 @@ const updateContact = async (req, res) => {
       });
     }
 
+    const currentImage = currentContact.rows[0].image;
     const image = req.file ? req.file.path : currentImage;
 
     const result = await pool.query(
@@ -165,15 +156,7 @@ const updateContact = async (req, res) => {
       AND user_id = $7
       RETURNING *
       `,
-      [
-        name,
-        relationship_type_id,
-        where_met,
-        image,
-        memory_note,
-        id,
-        user_id,
-      ]
+      [name, relationship_type_id, where_met, image, memory_note, id, user_id],
     );
 
     res.json(result.rows[0]);
@@ -197,7 +180,7 @@ const deleteContact = async (req, res) => {
       AND user_id = $2
       RETURNING *
       `,
-      [id, user_id]
+      [id, user_id],
     );
 
     if (result.rows.length === 0) {
