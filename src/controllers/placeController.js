@@ -133,6 +133,23 @@ const updatePlace = async (req, res) => {
       tips,
     } = req.body;
 
+    const currentPlace = await pool.query(
+      `
+      SELECT image
+      FROM "FloFlo".place
+      WHERE id = $1
+      AND user_id = $2
+      `,
+      [id, user_id],
+    );
+
+    if (currentPlace.rows.length === 0) {
+      return res.status(404).json({
+        message: "Lugar no encontrado",
+      });
+    }
+
+    const currentImage = currentPlace.rows[0].image;
     const image = req.file ? req.file.path : currentImage;
 
     const result = await pool.query(
@@ -166,12 +183,6 @@ const updatePlace = async (req, res) => {
         user_id,
       ],
     );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        message: "Lugar no encontrado",
-      });
-    }
 
     res.json(result.rows[0]);
   } catch (error) {
