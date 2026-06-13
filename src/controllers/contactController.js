@@ -80,7 +80,7 @@ const createContact = async (req, res) => {
       memory_note,
     } = req.body;
 
-    const image = req.file ? `/uploads/${req.file.filename}` : null;
+    const image = req.file ? req.file.path : null;
 
     const result = await pool.query(
       `
@@ -149,9 +149,7 @@ const updateContact = async (req, res) => {
       });
     }
 
-    const image = req.file
-      ? `/uploads/${req.file.filename}`
-      : currentContact.rows[0].image;
+    const image = req.file ? req.file.path : currentImage;
 
     const result = await pool.query(
       `

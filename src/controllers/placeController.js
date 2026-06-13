@@ -74,7 +74,7 @@ const createPlace = async (req, res) => {
       tips,
     } = req.body;
 
-    const image = req.file ? `/uploads/${req.file.filename}` : null;
+    const image = req.file ? req.file.path : null;
 
     const result = await pool.query(
       `
@@ -133,9 +133,7 @@ const updatePlace = async (req, res) => {
       tips,
     } = req.body;
 
-    const image = req.file
-      ? `/uploads/${req.file.filename}`
-      : req.body.image || null;
+    const image = req.file ? req.file.path : currentImage;
 
     const result = await pool.query(
       `
