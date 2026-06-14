@@ -1,33 +1,31 @@
 const pool = require("../database/db");
 
-const getAllContactConversations = async (req, res) => {
+const getContactConversationsByContactId = async (req, res) => {
   try {
+    const { contactId } = req.params;
     const user_id = req.user.id;
 
     const result = await pool.query(
       `
       SELECT
-        ucc.id,
-        ucc.user_id,
-        ucc.user_contact_id,
-        uc.name AS contact_name,
-        uc.image AS contact_image,
-        ucc.title,
-        ucc.situation,
-        ucc.what_to_say,
-        ucc.reminder,
-        ucc.correct_answer,
-        ucc.wrong_answer_1,
-        ucc.wrong_answer_2,
-        ucc.created_at,
-        ucc.updated_at
-      FROM "FloFlo".user_contact_conversation ucc
-      LEFT JOIN "FloFlo".user_contact uc
-        ON ucc.user_contact_id = uc.id
-      WHERE ucc.user_id = $1
-      ORDER BY ucc.created_at DESC
+        id,
+        user_id,
+        user_contact_id,
+        title,
+        situation,
+        what_to_say,
+        reminder,
+        correct_answer,
+        wrong_answer_1,
+        wrong_answer_2,
+        created_at,
+        updated_at
+      FROM "FloFlo".user_contact_conversation
+      WHERE user_contact_id = $1
+      AND user_id = $2
+      ORDER BY created_at DESC
       `,
-      [user_id]
+      [contactId, user_id]
     );
 
     res.json(result.rows);
