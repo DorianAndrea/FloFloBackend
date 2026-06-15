@@ -155,7 +155,73 @@ Instrucciones:
   }
 };
 
+const generateContactConversation = async (req, res) => {
+  try {
+    const { contactName, relationshipName, situation } = req.body;
+
+    if (!contactName || !situation) {
+      return res.status(400).json({
+        message: "contactName y situation son obligatorios",
+      });
+    }
+
+    const response = await client.chat.completions.create({
+      model: "gpt-4.1-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "Eres Félix, un asistente educativo para niños neurodivergentes. Generas conversaciones sociales simples, tranquilas y positivas. Devuelve solo JSON válido.",
+        },
+        {
+          role: "user",
+          content: `
+Genera una conversación social breve para practicar con una persona.
+
+Datos:
+- Persona: ${contactName}
+- Relación: ${relationshipName || "persona conocida"}
+- Escenario: ${situation}
+
+Devuelve SOLO este JSON:
+{
+  "title": "",
+  "situation": "",
+  "what_to_say": "",
+  "correct_answer": "",
+  "wrong_answer_1": "",
+  "wrong_answer_2": "",
+  "reminder": ""
+}
+
+Reglas:
+- Lenguaje simple.
+- Tono amable.
+- La respuesta correcta debe ser adecuada y positiva.
+- Las respuestas incorrectas deben ser claramente incorrectas, pero no ofensivas ni agresivas.
+- Todo debe ser breve.
+`,
+        },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.4,
+    });
+
+    const content = response.choices[0].message.content;
+    const parsed = JSON.parse(content);
+
+    res.json(parsed);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Error al generar conversación de contacto con IA",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   generatePlaceSteps,
   generateConversation,
+  generateContactConversation,
 };

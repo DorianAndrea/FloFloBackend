@@ -3,7 +3,8 @@ const authMiddleware = require("../middleware/authMiddleware");
 
 const {
   generatePlaceSteps,
-  generateConversation
+  generateConversation, 
+  generateContactConversation,
 } = require("../controllers/aiController");
 
 const router = express.Router();
@@ -17,6 +18,11 @@ router.post(
   "/generate-conversation",
   authMiddleware,
   generateConversation
+);
+
+router.post(
+  "/contact-conversation",
+  generateContactConversation
 );
 
 module.exports = router;
