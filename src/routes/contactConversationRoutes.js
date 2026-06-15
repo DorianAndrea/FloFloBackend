@@ -1,29 +1,37 @@
 const express = require("express");
-const authMiddleware = require ("../middleware/authMiddleware")
+const authMiddleware = require("../middleware/authMiddleware");
+
 const {
   getAllContactConversations,
-  getContactConversations,
+  getContactConversationProgress,
   createContactConversation,
   getContactConversationsByContactId,
   getContactConversationById,
   updateContactConversation,
   deleteContactConversation,
+  completeContactConversation,
 } = require("../controllers/contactConversationController");
 
 const router = express.Router();
 
 router.get("/", authMiddleware, getAllContactConversations);
 
-router.get("/", authMiddleware ,getContactConversations);
+router.get("/progress", authMiddleware, getContactConversationProgress);
 
-router.post("/", authMiddleware ,createContactConversation);
+router.post("/", authMiddleware, createContactConversation);
 
-router.get("/contact/:id", authMiddleware, getContactConversationsByContactId);
+router.get(
+  "/contact/:contactId",
+  authMiddleware,
+  getContactConversationsByContactId,
+);
+
+router.post("/:id/complete", authMiddleware, completeContactConversation);
 
 router.get("/:id", authMiddleware, getContactConversationById);
 
-router.put("/:id",authMiddleware, updateContactConversation);
+router.put("/:id", authMiddleware, updateContactConversation);
 
-router.delete("/:id",authMiddleware, deleteContactConversation);
+router.delete("/:id", authMiddleware, deleteContactConversation);
 
 module.exports = router;
