@@ -16,9 +16,6 @@ const getAllContactConversations = async (req, res) => {
   ORDER BY ordinal_position;
 `);
 
-    console.log("DB BACKEND:", debug.rows[0]);
-    console.log("COLUMNAS BACKEND:", debugColumns.rows);
-
     const result = await pool.query(
       `
       SELECT
