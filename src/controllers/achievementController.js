@@ -60,26 +60,28 @@ const getAchievements = async (req, res) => {
           Number(progress.level) >= Number(achievement.required_value);
       }
 
-      if (achievement.required_type === "conversations") {
+      if (achievement.required_type === "completed_conversations") {
         unlockedByProgress =
           Number(progress.completed_conversations) >=
           Number(achievement.required_value);
       }
 
-      if (achievement.required_type === "places") {
+      if (achievement.required_type === "completed_places") {
         unlockedByProgress =
-          Number(progress.completed_places) >= Number(achievement.required_value);
+          Number(progress.completed_places) >=
+          Number(achievement.required_value);
       }
 
-      if (achievement.required_type === "routines") {
+      if (achievement.required_type === "completed_routines") {
         unlockedByProgress =
           Number(progress.completed_routines) >=
           Number(achievement.required_value);
       }
 
-      if (achievement.required_type === "moods") {
+      if (achievement.required_type === "completed_moods") {
         unlockedByProgress =
-          Number(progress.completed_moods) >= Number(achievement.required_value);
+          Number(progress.completed_moods) >=
+          Number(achievement.required_value);
       }
 
       return {
