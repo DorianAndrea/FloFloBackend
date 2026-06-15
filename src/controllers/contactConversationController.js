@@ -4,6 +4,21 @@ const getAllContactConversations = async (req, res) => {
   try {
     const user_id = req.user.id;
 
+    const debug = await pool.query(`
+  SELECT current_database(), current_user;
+`);
+
+    const debugColumns = await pool.query(`
+  SELECT column_name
+  FROM information_schema.columns
+  WHERE table_schema = 'FloFlo'
+  AND table_name = 'user_contact_conversation'
+  ORDER BY ordinal_position;
+`);
+
+    console.log("DB BACKEND:", debug.rows[0]);
+    console.log("COLUMNAS BACKEND:", debugColumns.rows);
+
     const result = await pool.query(
       `
       SELECT
