@@ -1,5 +1,8 @@
 const pool = require("../database/db");
-const { unlockAchievement, checkAndUnlockAchievements, } = require("../services/achievementService");
+const {
+  unlockAchievement,
+  checkAndUnlockAchievements,
+} = require("../services/achievementService");
 
 const calculateLevel = (points) => {
   if (points >= 100) return 5;
@@ -17,14 +20,8 @@ const createConversation = async (req, res) => {
 
     const user_id = req.user.id;
 
-    const {
-      title,
-      situation,
-      what_to_say,
-      reminder,
-      messages,
-      exercise,
-    } = req.body;
+    const { title, situation, what_to_say, reminder, messages, exercise } =
+      req.body;
 
     if (!title || !situation) {
       return res.status(400).json({
@@ -47,7 +44,7 @@ const createConversation = async (req, res) => {
       VALUES ($1,$2,$3,$4,$5,NOW(),NOW())
       RETURNING *
       `,
-      [user_id, title, situation, what_to_say || null, reminder || null]
+      [user_id, title, situation, what_to_say || null, reminder || null],
     );
 
     const conversation = conversationResult.rows[0];
@@ -65,7 +62,7 @@ const createConversation = async (req, res) => {
           )
           VALUES ($1,$2,$3,$4)
           `,
-          [conversation.id, messages[i].speaker, messages[i].text, i + 1]
+          [conversation.id, messages[i].speaker, messages[i].text, i + 1],
         );
       }
     }
@@ -82,7 +79,7 @@ const createConversation = async (req, res) => {
         VALUES ($1,$2,NOW())
         RETURNING *
         `,
-        [conversation.id, exercise.question]
+        [conversation.id, exercise.question],
       );
 
       const savedExercise = exerciseResult.rows[0];
@@ -99,7 +96,7 @@ const createConversation = async (req, res) => {
             )
             VALUES ($1,$2,$3)
             `,
-            [savedExercise.id, option.text, option.isCorrect]
+            [savedExercise.id, option.text, option.isCorrect],
           );
         }
       }
@@ -135,7 +132,7 @@ const getConversations = async (req, res) => {
       WHERE user_id = $1
       ORDER BY created_at DESC
       `,
-      [user_id]
+      [user_id],
     );
 
     const conversations = [];
@@ -148,7 +145,7 @@ const getConversations = async (req, res) => {
         WHERE conversation_id = $1
         ORDER BY order_number
         `,
-        [conversation.id]
+        [conversation.id],
       );
 
       const exerciseResult = await pool.query(
@@ -158,7 +155,7 @@ const getConversations = async (req, res) => {
         WHERE conversation_id = $1
         LIMIT 1
         `,
-        [conversation.id]
+        [conversation.id],
       );
 
       let exercise = null;
@@ -173,7 +170,7 @@ const getConversations = async (req, res) => {
           WHERE exercise_id = $1
           ORDER BY id
           `,
-          [exerciseRow.id]
+          [exerciseRow.id],
         );
 
         exercise = {
@@ -225,7 +222,7 @@ const completeConversation = async (req, res) => {
       WHERE user_id = $1
       AND conversation_id = $2
       `,
-      [user_id, id]
+      [user_id, id],
     );
 
     if (existing.rows.length > 0) {
@@ -249,7 +246,7 @@ const completeConversation = async (req, res) => {
       VALUES ($1,$2,true,1,NOW())
       RETURNING *
       `,
-      [user_id, id]
+      [user_id, id],
     );
 
     const currentProgress = await pool.query(
@@ -258,7 +255,7 @@ const completeConversation = async (req, res) => {
       FROM "FloFlo".user_progress
       WHERE user_id = $1
       `,
-      [user_id]
+      [user_id],
     );
 
     let newPoints = 1;
@@ -278,7 +275,7 @@ const completeConversation = async (req, res) => {
           updated_at = NOW()
         WHERE user_id = $3
         `,
-        [newPoints, newLevel, user_id]
+        [newPoints, newLevel, user_id],
       );
     } else {
       await pool.query(
@@ -296,10 +293,9 @@ const completeConversation = async (req, res) => {
         )
         VALUES ($1,$2,$3,1,0,0,0,NOW())
         `,
-        [user_id, 1, 1]
+        [user_id, 1, 1],
       );
     }
-    
 
     const completedCount = await pool.query(
       `
@@ -308,7 +304,7 @@ const completeConversation = async (req, res) => {
       WHERE user_id = $1
       AND completed = true
       `,
-      [user_id]
+      [user_id],
     );
 
     const totalCompleted = Number(completedCount.rows[0].count);
@@ -326,7 +322,7 @@ const completeConversation = async (req, res) => {
         FROM "FloFlo".achievement
         WHERE id = $1
         `,
-        [achievementId]
+        [achievementId],
       );
 
       if (achievementResult.rows.length > 0) {
@@ -383,7 +379,7 @@ const getConversationProgress = async (req, res) => {
       WHERE user_id = $1
       AND completed = true
       `,
-      [userId]
+      [userId],
     );
 
     res.json(result.rows);
@@ -396,9 +392,473 @@ const getConversationProgress = async (req, res) => {
   }
 };
 
+const getPaginatedConversations = async (req, res) => {
+  try {
+    const user_id = req.user.id;
+
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 6;
+    const search = req.query.search || "";
+    const order = req.query.order || "recientes";
+    const offset = (page - 1) * limit;
+
+    if (order === "antiguos") {
+      orderBy = "ucc.created_at ASC";
+    }
+
+    if (order === "az") {
+      orderBy = "LOWER(ucc.title) ASC";
+    }
+
+    if (order === "za") {
+      orderBy = "LOWER(ucc.title) DESC";
+    }
+    let orderBy = "ucc.created_at DESC";
+
+    if (order === "antiguos") {
+      orderBy = "ucc.created_at ASC";
+    }
+
+    if (order === "az") {
+      orderBy = "LOWER(ucc.title) ASC";
+    }
+
+    if (order === "za") {
+      orderBy = "LOWER(ucc.title) DESC";
+    }
+    const totalResult = await pool.query(
+      `
+      SELECT COUNT(*) AS total
+      FROM "FloFlo".user_contact_conversation ucc
+      LEFT JOIN "FloFlo".user_contact uc
+        ON ucc.user_contact_id = uc.id
+      WHERE ucc.user_id = $1
+      AND (
+        $2 = ''
+        OR translate(LOWER(ucc.title), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+          LIKE translate(LOWER('%' || $2 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+        OR translate(LOWER(ucc.situation), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+          LIKE translate(LOWER('%' || $2 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+        OR translate(LOWER(COALESCE(uc.name, '')), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+          LIKE translate(LOWER('%' || $2 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+      )
+      `,
+      [user_id, search],
+    );
+
+    const total = Number(totalResult.rows[0].total);
+    const totalPages = Math.ceil(total / limit);
+
+    const result = await pool.query(
+      `
+     SELECT
+      ucc.*,
+      COALESCE(ucc.is_favorite, false) AS is_favorite,
+      uc.name AS contact_name,
+      uc.image AS contact_image
+      FROM "FloFlo".user_contact_conversation ucc
+      LEFT JOIN "FloFlo".user_contact uc
+        ON ucc.user_contact_id = uc.id
+      WHERE ucc.user_id = $1
+      AND (
+        $4 = ''
+        OR translate(LOWER(ucc.title), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+          LIKE translate(LOWER('%' || $4 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+        OR translate(LOWER(ucc.situation), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+          LIKE translate(LOWER('%' || $4 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+        OR translate(LOWER(COALESCE(uc.name, '')), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+          LIKE translate(LOWER('%' || $4 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+      )
+      ORDER BY ${orderBy}
+      LIMIT $2 OFFSET $3
+      `,
+      [user_id, limit, offset, search],
+    );
+
+    const conversations = [];
+
+    for (const conversation of result.rows) {
+      const isContact = conversation.user_contact_id !== null;
+
+      const messagesResult = await pool.query(
+        `
+        SELECT *
+        FROM "FloFlo".conversation_message
+        WHERE conversation_id = $1
+        ORDER BY order_number
+        `,
+        [conversation.id],
+      );
+
+      const exerciseResult = await pool.query(
+        `
+        SELECT *
+        FROM "FloFlo".conversation_exercise
+        WHERE conversation_id = $1
+        LIMIT 1
+        `,
+        [conversation.id],
+      );
+
+      let exercise = null;
+
+      if (exerciseResult.rows.length > 0) {
+        const exerciseRow = exerciseResult.rows[0];
+
+        const optionsResult = await pool.query(
+          `
+          SELECT *
+          FROM "FloFlo".conversation_option
+          WHERE exercise_id = $1
+          ORDER BY id
+          `,
+          [exerciseRow.id],
+        );
+
+        exercise = {
+          id: exerciseRow.id,
+          question: exerciseRow.question,
+          options: optionsResult.rows.map((option) => ({
+            id: option.id,
+            text: option.option_text,
+            isCorrect: option.is_correct,
+          })),
+        };
+      }
+
+      conversations.push({
+        id: conversation.id,
+        tipo: isContact ? "contacto" : "normal",
+        user_contact_id: conversation.user_contact_id,
+        is_favorite: Boolean(conversation.is_favorite),
+        contact_name: conversation.contact_name,
+        contact_image: conversation.contact_image,
+        title: conversation.title,
+        situation: conversation.situation,
+        what_to_say: conversation.what_to_say,
+        reminder: conversation.reminder,
+        correct_answer: conversation.correct_answer,
+        wrong_answer_1: conversation.wrong_answer_1,
+        wrong_answer_2: conversation.wrong_answer_2,
+        messages: messagesResult.rows.map((message) => ({
+          id: message.id,
+          speaker: message.speaker,
+          text: message.message,
+          orderNumber: message.order_number,
+        })),
+        exercise,
+      });
+    }
+
+    res.json({
+      conversations,
+      page,
+      limit,
+      total,
+      totalPages,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+const toggleFavoriteConversation = async (req, res) => {
+  try {
+    const user_id = req.user.id;
+    const { id } = req.params;
+
+    await pool.query(`
+      ALTER TABLE "FloFlo".user_contact_conversation
+      ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT false
+    `);
+
+    const result = await pool.query(
+      `
+      UPDATE "FloFlo".user_contact_conversation
+      SET
+        is_favorite = NOT COALESCE(is_favorite, false),
+        updated_at = NOW()
+      WHERE id = $1
+      AND user_id = $2
+      RETURNING *
+      `,
+      [id, user_id],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "Conversación no encontrada",
+      });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+const deleteConversation = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const user_id = req.user.id;
+    const { id } = req.params;
+
+    const exists = await client.query(
+      `
+      SELECT id
+      FROM "FloFlo".user_contact_conversation
+      WHERE id = $1
+      AND user_id = $2
+      `,
+      [id, user_id],
+    );
+
+    if (exists.rows.length === 0) {
+      await client.query("ROLLBACK");
+
+      return res.status(404).json({
+        message: "Conversación no encontrada",
+      });
+    }
+
+    await client.query(
+      `
+      DELETE FROM "FloFlo".contact_conversation_progress
+      WHERE contact_conversation_id = $1
+      AND user_id = $2
+      `,
+      [id, user_id],
+    );
+
+    await client.query(
+      `
+      DELETE FROM "FloFlo".conversation_progress
+      WHERE conversation_id = $1
+      AND user_id = $2
+      `,
+      [id, user_id],
+    );
+
+    await client.query(
+      `
+      DELETE FROM "FloFlo".conversation_option
+      WHERE exercise_id IN (
+        SELECT id
+        FROM "FloFlo".conversation_exercise
+        WHERE conversation_id = $1
+      )
+      `,
+      [id],
+    );
+
+    await client.query(
+      `
+      DELETE FROM "FloFlo".conversation_exercise
+      WHERE conversation_id = $1
+      `,
+      [id],
+    );
+
+    await client.query(
+      `
+      DELETE FROM "FloFlo".conversation_message
+      WHERE conversation_id = $1
+      `,
+      [id],
+    );
+
+    const deleted = await client.query(
+      `
+      DELETE FROM "FloFlo".user_contact_conversation
+      WHERE id = $1
+      AND user_id = $2
+      RETURNING *
+      `,
+      [id, user_id],
+    );
+
+    await client.query("COMMIT");
+
+    res.json({
+      message: "Conversación eliminada correctamente",
+      conversation: deleted.rows[0],
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+
+    console.error(error);
+
+    res.status(500).json({
+      message: error.message,
+    });
+  } finally {
+    client.release();
+  }
+};
+const updateConversation = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const user_id = req.user.id;
+    const { id } = req.params;
+
+    const { title, situation, what_to_say, reminder, messages, exercise } =
+      req.body;
+
+    const exists = await client.query(
+      `
+      SELECT id
+      FROM "FloFlo".user_contact_conversation
+      WHERE id = $1
+      AND user_id = $2
+      `,
+      [id, user_id],
+    );
+
+    if (exists.rows.length === 0) {
+      await client.query("ROLLBACK");
+
+      return res.status(404).json({
+        message: "Conversación no encontrada",
+      });
+    }
+
+    const updatedConversation = await client.query(
+      `
+      UPDATE "FloFlo".user_contact_conversation
+      SET
+        title = $1,
+        situation = $2,
+        what_to_say = $3,
+        reminder = $4,
+        updated_at = NOW()
+      WHERE id = $5
+      AND user_id = $6
+      RETURNING *
+      `,
+      [title, situation, what_to_say || null, reminder || null, id, user_id],
+    );
+
+    await client.query(
+      `
+      DELETE FROM "FloFlo".conversation_option
+      WHERE exercise_id IN (
+        SELECT id
+        FROM "FloFlo".conversation_exercise
+        WHERE conversation_id = $1
+      )
+      `,
+      [id],
+    );
+
+    await client.query(
+      `
+      DELETE FROM "FloFlo".conversation_exercise
+      WHERE conversation_id = $1
+      `,
+      [id],
+    );
+
+    await client.query(
+      `
+      DELETE FROM "FloFlo".conversation_message
+      WHERE conversation_id = $1
+      `,
+      [id],
+    );
+
+    if (Array.isArray(messages)) {
+      for (let i = 0; i < messages.length; i++) {
+        await client.query(
+          `
+          INSERT INTO "FloFlo".conversation_message
+          (
+            conversation_id,
+            speaker,
+            message,
+            order_number
+          )
+          VALUES ($1,$2,$3,$4)
+          `,
+          [id, messages[i].speaker, messages[i].text, i + 1],
+        );
+      }
+    }
+
+    if (exercise?.question) {
+      const exerciseResult = await client.query(
+        `
+        INSERT INTO "FloFlo".conversation_exercise
+        (
+          conversation_id,
+          question,
+          created_at
+        )
+        VALUES ($1,$2,NOW())
+        RETURNING *
+        `,
+        [id, exercise.question],
+      );
+
+      const savedExercise = exerciseResult.rows[0];
+
+      if (Array.isArray(exercise.options)) {
+        for (const option of exercise.options) {
+          await client.query(
+            `
+            INSERT INTO "FloFlo".conversation_option
+            (
+              exercise_id,
+              option_text,
+              is_correct
+            )
+            VALUES ($1,$2,$3)
+            `,
+            [savedExercise.id, option.text, option.isCorrect],
+          );
+        }
+      }
+    }
+
+    await client.query("COMMIT");
+
+    res.json({
+      message: "Conversación actualizada correctamente",
+      conversation: updatedConversation.rows[0],
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+
+    console.error(error);
+
+    res.status(500).json({
+      message: error.message,
+    });
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   createConversation,
   getConversations,
+  getPaginatedConversations,
   completeConversation,
   getConversationProgress,
+  toggleFavoriteConversation,
+  deleteConversation,
+  updateConversation,
 };
