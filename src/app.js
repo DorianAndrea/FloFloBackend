@@ -32,6 +32,9 @@ app.use("/api/conversations", conversationRoutes);
 app.use("/api/progress", progressRoutes);
 app.use("/api/achievements", achievementRoutes);
 app.use("/api/profile", profileRoutes);
+const parentDashboardRoutes = require("./routes/parentDashboardRoutes");
+
+app.use("/api/parent-dashboard", parentDashboardRoutes);
 
 app.get("/", (req, res) => {
   res.send("Backend FloFlo funcionando");

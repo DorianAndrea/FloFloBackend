@@ -1,10 +1,6 @@
 const pool = require("../database/db");
 
-const unlockAchievement = async (
-  userId,
-  achievementId
-) => {
-
+const unlockAchievement = async (userId, achievementId) => {
   const existing = await pool.query(
     `
     SELECT *
@@ -12,26 +8,26 @@ const unlockAchievement = async (
     WHERE user_id = $1
     AND achievement_id = $2
     `,
-    [userId, achievementId]
+    [Number(userId), Number(achievementId)]
   );
 
   if (existing.rows.length > 0) {
     return null;
   }
 
- const result = await pool.query(
-  `
-  INSERT INTO "FloFlo".user_achievement
-  (
-    user_id,
-    achievement_id,
-    unlocked_at
-  )
-  VALUES ($1,$2,NOW())
-  RETURNING *
-  `,
-  [userId, achievementId]
-);
+  const result = await pool.query(
+    `
+    INSERT INTO "FloFlo".user_achievement
+    (
+      user_id,
+      achievement_id,
+      unlocked_at
+    )
+    VALUES ($1, $2, NOW())
+    RETURNING *
+    `,
+    [Number(userId), Number(achievementId)]
+  );
 
   return result.rows[0];
 };
@@ -43,7 +39,7 @@ const checkAndUnlockAchievements = async (userId) => {
     FROM "FloFlo".user_progress
     WHERE user_id = $1
     `,
-    [userId]
+    [Number(userId)]
   );
 
   if (progressResult.rows.length === 0) {
@@ -97,11 +93,37 @@ const checkAndUnlockAchievements = async (userId) => {
       }
     }
   }
+
   return unlockedAchievements;
-  
+};
+
+const getAchievementsByUser = async (userId) => {
+  const result = await pool.query(
+    `
+    SELECT 
+      a.id,
+      a.name,
+      a.description,
+      a.icon,
+      CASE 
+        WHEN ua.id IS NULL THEN false
+        ELSE true
+      END AS unlocked,
+      ua.unlocked_at
+    FROM "FloFlo".achievement a
+    LEFT JOIN "FloFlo".user_achievement ua
+      ON ua.achievement_id = a.id
+      AND ua.user_id = $1
+    ORDER BY a.id;
+    `,
+    [Number(userId)]
+  );
+
+  return result.rows;
 };
 
 module.exports = {
   unlockAchievement,
   checkAndUnlockAchievements,
+  getAchievementsByUser,
 };
