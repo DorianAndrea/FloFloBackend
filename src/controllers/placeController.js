@@ -16,20 +16,54 @@ const getPlaces = async (req, res) => {
   try {
     const user_id = req.user.id;
 
+    const search = req.query.search || "";
+    const order = req.query.order || "recientes";
+
+    let orderBy = "p.id DESC";
+
+    if (order === "antiguos") {
+      orderBy = "p.id ASC";
+    }
+
+    if (order === "az") {
+      orderBy = "LOWER(p.name) ASC";
+    }
+
+    if (order === "za") {
+      orderBy = "LOWER(p.name) DESC";
+    }
+
     const result = await pool.query(
       `
-      SELECT *
-      FROM "FloFlo".place
-      WHERE user_id = $1
-      ORDER BY created_at DESC
+      SELECT
+        p.*
+      FROM "FloFlo".place p
+      WHERE p.user_id = $1
+      AND (
+        $2 = ''
+        OR translate(LOWER(p.name), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+          LIKE translate(LOWER('%' || $2 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+        OR translate(LOWER(COALESCE(p.description, '')), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+          LIKE translate(LOWER('%' || $2 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+        OR translate(LOWER(COALESCE(p.activity, '')), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+          LIKE translate(LOWER('%' || $2 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+        OR translate(LOWER(COALESCE(p.transport, '')), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+          LIKE translate(LOWER('%' || $2 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+        OR translate(LOWER(COALESCE(p.people_present, '')), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+          LIKE translate(LOWER('%' || $2 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+      )
+      ORDER BY ${orderBy}
       `,
-      [user_id],
+      [user_id, search],
     );
 
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: error.message });
+
+    res.status(500).json({
+      message: error.message,
+    });
   }
 };
 

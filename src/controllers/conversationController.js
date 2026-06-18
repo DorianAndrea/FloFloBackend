@@ -402,30 +402,20 @@ const getPaginatedConversations = async (req, res) => {
     const order = req.query.order || "recientes";
     const offset = (page - 1) * limit;
 
+    let orderBy = "ucc.is_favorite DESC, ucc.created_at DESC";
+
     if (order === "antiguos") {
-      orderBy = "ucc.created_at ASC";
+      orderBy = "ucc.is_favorite DESC, ucc.created_at ASC";
     }
 
     if (order === "az") {
-      orderBy = "LOWER(ucc.title) ASC";
+      orderBy = "ucc.is_favorite DESC, LOWER(ucc.title) ASC";
     }
 
     if (order === "za") {
-      orderBy = "LOWER(ucc.title) DESC";
-    }
-    let orderBy = "ucc.created_at DESC";
-
-    if (order === "antiguos") {
-      orderBy = "ucc.created_at ASC";
+      orderBy = "ucc.is_favorite DESC, LOWER(ucc.title) DESC";
     }
 
-    if (order === "az") {
-      orderBy = "LOWER(ucc.title) ASC";
-    }
-
-    if (order === "za") {
-      orderBy = "LOWER(ucc.title) DESC";
-    }
     const totalResult = await pool.query(
       `
       SELECT COUNT(*) AS total

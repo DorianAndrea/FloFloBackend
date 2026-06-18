@@ -4,6 +4,23 @@ const getContacts = async (req, res) => {
   try {
     const user_id = req.user.id;
 
+    const search = req.query.search || "";
+    const order = req.query.order || "recientes";
+
+    let orderBy = "uc.id DESC";
+
+    if (order === "antiguos") {
+      orderBy = "uc.id ASC";
+    }
+
+    if (order === "az") {
+      orderBy = "LOWER(uc.name) ASC";
+    }
+
+    if (order === "za") {
+      orderBy = "LOWER(uc.name) DESC";
+    }
+
     const result = await pool.query(
       `
       SELECT
@@ -21,9 +38,20 @@ const getContacts = async (req, res) => {
       INNER JOIN "FloFlo".relationship_type rt
         ON uc.relationship_type_id = rt.id
       WHERE uc.user_id = $1
-      ORDER BY uc.name
+      AND (
+        $2 = ''
+        OR translate(LOWER(uc.name), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+          LIKE translate(LOWER('%' || $2 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+        OR translate(LOWER(rt.relationship_name), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+          LIKE translate(LOWER('%' || $2 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+        OR translate(LOWER(uc.where_met), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+          LIKE translate(LOWER('%' || $2 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+        OR translate(LOWER(COALESCE(uc.memory_note, '')), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+          LIKE translate(LOWER('%' || $2 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+      )
+      ORDER BY ${orderBy}
       `,
-      [user_id],
+      [user_id, search],
     );
 
     res.json(result.rows);
@@ -169,11 +197,93 @@ const updateContact = async (req, res) => {
 };
 
 const deleteContact = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user_id = req.user.id;
+  const client = await pool.connect();
 
-    const result = await pool.query(
+  try {
+    await client.query("BEGIN");
+
+    const user_id = req.user.id;
+    const { id } = req.params;
+
+    const contactExists = await client.query(
+      `
+      SELECT id
+      FROM "FloFlo".user_contact
+      WHERE id = $1
+      AND user_id = $2
+      `,
+      [id, user_id],
+    );
+
+    if (contactExists.rows.length === 0) {
+      await client.query("ROLLBACK");
+
+      return res.status(404).json({
+        message: "Persona no encontrada",
+      });
+    }
+
+    const conversations = await client.query(
+      `
+      SELECT id
+      FROM "FloFlo".user_contact_conversation
+      WHERE user_contact_id = $1
+      AND user_id = $2
+      `,
+      [id, user_id],
+    );
+
+    const conversationIds = conversations.rows.map((row) => row.id);
+
+    if (conversationIds.length > 0) {
+      await client.query(
+        `
+        DELETE FROM "FloFlo".contact_conversation_progress
+        WHERE contact_conversation_id = ANY($1::int[])
+        AND user_id = $2
+        `,
+        [conversationIds, user_id],
+      );
+
+      await client.query(
+        `
+        DELETE FROM "FloFlo".conversation_option
+        WHERE exercise_id IN (
+          SELECT id
+          FROM "FloFlo".conversation_exercise
+          WHERE conversation_id = ANY($1::int[])
+        )
+        `,
+        [conversationIds],
+      );
+
+      await client.query(
+        `
+        DELETE FROM "FloFlo".conversation_exercise
+        WHERE conversation_id = ANY($1::int[])
+        `,
+        [conversationIds],
+      );
+
+      await client.query(
+        `
+        DELETE FROM "FloFlo".conversation_message
+        WHERE conversation_id = ANY($1::int[])
+        `,
+        [conversationIds],
+      );
+
+      await client.query(
+        `
+        DELETE FROM "FloFlo".user_contact_conversation
+        WHERE id = ANY($1::int[])
+        AND user_id = $2
+        `,
+        [conversationIds, user_id],
+      );
+    }
+
+    const deleted = await client.query(
       `
       DELETE FROM "FloFlo".user_contact
       WHERE id = $1
@@ -183,21 +293,22 @@ const deleteContact = async (req, res) => {
       [id, user_id],
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        message: "Contacto no encontrado",
-      });
-    }
+    await client.query("COMMIT");
 
     res.json({
-      message: "Contacto eliminado correctamente",
-      contact: result.rows[0],
+      message: "Persona eliminada correctamente",
+      contact: deleted.rows[0],
     });
   } catch (error) {
+    await client.query("ROLLBACK");
+
     console.error(error);
+
     res.status(500).json({
       message: error.message,
     });
+  } finally {
+    client.release();
   }
 };
 
