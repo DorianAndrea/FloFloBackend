@@ -18,8 +18,19 @@ const createToken = (user) => {
 
 const register = async (req, res) => {
   try {
-    const { firstName, lastName, rut, birth_date, email, password } = req.body;
+    const {
+      firstName,
+      lastName,
+      rut,
+      birth_date,
+      email,
+      password,
+      role,
+    } = req.body;
+
     const avatar = req.file ? req.file.path : null;
+
+    const userRole = role === "parent" ? "parent" : "child";
 
     if (!firstName || !lastName || !email || !password) {
       return res.status(400).json({
@@ -46,30 +57,32 @@ const register = async (req, res) => {
 
     const result = await pool.query(
       `
-  INSERT INTO "FloFlo"."user"
-  (
-    "firstName",
-    "lastName",
-    rut,
-    birth_date,
-    email,
-    password,
-    avatar,
-    created_at
-  )
-  VALUES
-  (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6,
-    $7,
-    NOW()
-  )
-  RETURNING id, "firstName", "lastName", rut, birth_date, email, avatar, role
-  `,
+      INSERT INTO "FloFlo"."user"
+      (
+        "firstName",
+        "lastName",
+        rut,
+        birth_date,
+        email,
+        password,
+        avatar,
+        role,
+        created_at
+      )
+      VALUES
+      (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        NOW()
+      )
+      RETURNING id, "firstName", "lastName", rut, birth_date, email, avatar, role
+      `,
       [
         firstName,
         lastName,
@@ -78,11 +91,11 @@ const register = async (req, res) => {
         email,
         hashedPassword,
         avatar || null,
+        userRole,
       ],
     );
 
     const user = result.rows[0];
-
     const token = createToken(user);
 
     res.status(201).json({
@@ -91,6 +104,7 @@ const register = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
+
     res.status(500).json({
       message: error.message,
     });
