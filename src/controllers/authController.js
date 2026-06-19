@@ -7,6 +7,7 @@ const createToken = (user) => {
     {
       id: user.id,
       email: user.email,
+      role: user.role,
     },
     process.env.JWT_SECRET,
     {
@@ -67,7 +68,7 @@ const register = async (req, res) => {
     $7,
     NOW()
   )
-  RETURNING id, "firstName", "lastName", rut, birth_date, email, avatar
+  RETURNING id, "firstName", "lastName", rut, birth_date, email, avatar, role
   `,
       [
         firstName,
@@ -81,6 +82,7 @@ const register = async (req, res) => {
     );
 
     const user = result.rows[0];
+
     const token = createToken(user);
 
     res.status(201).json({
@@ -98,6 +100,7 @@ const register = async (req, res) => {
 const login = async (req, res) => {
   try {
     const { email, password } = req.body || {};
+
     if (!email || !password) {
       return res.status(400).json({
         message: "Email y contraseña son obligatorios",
@@ -121,7 +124,10 @@ const login = async (req, res) => {
 
     const user = result.rows[0];
 
-    const validPassword = await bcrypt.compare(password, user.password);
+    const validPassword = await bcrypt.compare(
+      password,
+      user.password,
+    );
 
     if (!validPassword) {
       return res.status(401).json({
@@ -139,15 +145,18 @@ const login = async (req, res) => {
         lastName: user.lastName,
         email: user.email,
         avatar: user.avatar,
+        role: user.role,
       },
     });
   } catch (error) {
     console.error(error);
+
     res.status(500).json({
       message: error.message,
     });
   }
 };
+
 const getMe = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -162,6 +171,7 @@ const getMe = async (req, res) => {
         birth_date,
         email,
         avatar,
+        role,
         created_at
       FROM "FloFlo"."user"
       WHERE id = $1

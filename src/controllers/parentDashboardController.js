@@ -3,8 +3,6 @@ const parentDashboardService = require("../services/parentDashboardService");
 const getParentDashboard = async (req, res) => {
   try {
     const { userId } = req.params;
-    
-    console.log("Dashboard solicitado para usuario:", userId);
 
     const dashboard = await parentDashboardService.getParentDashboard(userId);
 

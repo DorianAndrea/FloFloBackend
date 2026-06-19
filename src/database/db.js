@@ -24,6 +24,18 @@ pool
   .connect()
   .then((client) => {
     console.log("✅ Conectado a PostgreSQL");
+
+    client
+      .query(
+        `
+  SELECT current_database(), current_user, inet_server_addr(), inet_server_port()
+`,
+
+  )
+  
+      .then((result) => {
+        console.log("INFO BD:", result.rows[0]);
+      });
     client.release();
   })
   .catch((error) => {
