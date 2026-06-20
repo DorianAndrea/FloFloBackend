@@ -16,6 +16,7 @@ const achievementRoutes = require("./routes/achievementRoutes");
 const profileRoutes = require("./routes/profileRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const parentDashboardRoutes = require("./routes/parentDashboardRoutes");
+const parentChildRoutes = require("./routes/parentChildRoutes");
 
 const app = express();
 
@@ -39,6 +40,7 @@ app.use("/api/achievements", achievementRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/report", reportRoutes);
 app.use("/api/parent-dashboard", parentDashboardRoutes);
+app.use("/api/parent-child", parentChildRoutes);
 
 app.get("/", (req, res) => {
   res.send("Backend FloFlo funcionando");

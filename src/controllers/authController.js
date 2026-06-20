@@ -18,19 +18,19 @@ const createToken = (user) => {
 
 const register = async (req, res) => {
   try {
-    const {
-      firstName,
-      lastName,
-      rut,
-      birth_date,
-      email,
-      password,
-      role,
-    } = req.body;
+    const { firstName, lastName, rut, birth_date, email, password, role } =
+      req.body;
 
     const avatar = req.file ? req.file.path : null;
 
-    const userRole = role === "parent" ? "parent" : "child";
+    const roleValue = String(role || "").toLowerCase();
+
+    const userRole =
+      roleValue === "parent" ||
+      roleValue.includes("padre") ||
+      roleValue.includes("cuidador")
+        ? "parent"
+        : "child";
 
     if (!firstName || !lastName || !email || !password) {
       return res.status(400).json({
@@ -138,10 +138,7 @@ const login = async (req, res) => {
 
     const user = result.rows[0];
 
-    const validPassword = await bcrypt.compare(
-      password,
-      user.password,
-    );
+    const validPassword = await bcrypt.compare(password, user.password);
 
     if (!validPassword) {
       return res.status(401).json({
@@ -150,6 +147,8 @@ const login = async (req, res) => {
     }
 
     const token = createToken(user);
+    console.log("USER LOGIN:", user);
+    console.log("ROLE LOGIN:", user.role);
 
     res.json({
       token,
@@ -207,11 +206,14 @@ const getMe = async (req, res) => {
     });
   }
 };
+
 const updateMe = async (req, res) => {
   try {
     const user_id = req.user.id;
 
-    const { firstName, lastName, rut, birth_date } = req.body;
+    const { firstName, lastName, rut, birth_date, role } = req.body;
+
+    const userRole = role === "parent" ? "parent" : "child";
 
     if (!firstName || !lastName) {
       return res.status(400).json({
@@ -229,7 +231,6 @@ const updateMe = async (req, res) => {
     );
 
     const currentAvatar = currentUser.rows[0]?.avatar || null;
-
     const avatar = req.file ? req.file.path : currentAvatar;
 
     const result = await pool.query(
@@ -241,11 +242,29 @@ const updateMe = async (req, res) => {
         rut = $3,
         birth_date = $4,
         avatar = $5,
+        role = $6,
         updated_at = NOW()
-      WHERE id = $6
-      RETURNING id, "firstName", "lastName", rut, birth_date, email, avatar, created_at
+      WHERE id = $7
+      RETURNING
+        id,
+        "firstName",
+        "lastName",
+        rut,
+        birth_date,
+        email,
+        avatar,
+        role,
+        created_at
       `,
-      [firstName, lastName, rut || null, birth_date || null, avatar, user_id],
+      [
+        firstName,
+        lastName,
+        rut || null,
+        birth_date || null,
+        avatar,
+        userRole,
+        user_id,
+      ],
     );
 
     res.json(result.rows[0]);
