@@ -25,7 +25,8 @@ const getRoutines = async (req, res) => {
 
 const createRoutine = async (req, res) => {
   try {
-    const { name, start_time, end_time, description, user_id } = req.body;
+    const user_id = req.user.id;
+    const { name, description, start_time, end_time } = req.body;
 
     if (!name || !start_time || !end_time) {
       return res.status(400).json({
@@ -33,34 +34,28 @@ const createRoutine = async (req, res) => {
       });
     }
 
-    if (end_time <= start_time) {
-      return res.status(400).json({
-        message: "La hora de término debe ser posterior a la hora de inicio",
-      });
-    }
-
     const result = await pool.query(
       `
-      INSERT INTO "FloFlo".routine
-      (
+      INSERT INTO "FloFlo".routine (
+        user_id,
         name,
+        description,
         start_time,
         end_time,
-        description,
-        created_at,
-        updated_at,
-        user_id    
+        created_at
       )
-      VALUES ($1,$2,$3,$4,NOW(),NOW(),$5)
-      RETURNING *     
+      VALUES ($1, $2, $3, $4, $5, NOW())
+      RETURNING *
       `,
-      [name, start_time, end_time, description, user_id]
+      [user_id, name, description || null, start_time, end_time]
     );
 
-    res.status(201).json(result.rows[0]);
+    res.status(201).json({
+      message: "Rutina creada correctamente",
+      routine: result.rows[0],
+    });
   } catch (error) {
-    console.error(error);
-
+    console.error("Error creando rutina:", error);
     res.status(500).json({
       message: error.message,
     });
@@ -157,7 +152,7 @@ const calculateLevel = (points) => {
 
 const completeRoutine = async (req, res) => {
   try {
-    const user_id = req.user.id;
+    const user_id= req.user.id;
     const { id } = req.params;
 
     const existing = await pool.query(

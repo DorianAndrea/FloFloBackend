@@ -1,28 +1,37 @@
 const parentChildService = require("../services/parentChildService");
 
-const getChildrenByParent = async (req, res) => {
+const getMyChildren = async (req, res) => {
   try {
-    const { parentId } = req.params;
+    console.log("REQ USER", req.user)
+    const parentId = req.user.id;
+
+    if (req.user.role !== "parent") {
+      return res.status(403).json({
+        message: "Solo una cuenta cuidadora puede tener niños asociados",
+      });
+    }
 
     const children = await parentChildService.getChildrenByParent(parentId);
 
     res.json(children);
   } catch (error) {
     console.error("Error obteniendo niños del padre:", error);
-
     res.status(500).json({
       message: "Error obteniendo niños asociados",
     });
   }
 };
 
-const linkChildToParent = async (req, res) => {
+const linkChildToMe = async (req, res) => {
   try {
-    const { parentId } = req.params;
+    const parentId = req.user.id;
     const { childEmail } = req.body;
-    console.log("PARENT ID:", parentId);
-    console.log("BODY:", req.body);
-    console.log("CHILD EMAIL:", childEmail);
+
+    if (req.user.role !== "parent") {
+      return res.status(403).json({
+        message: "Solo una cuenta cuidadora puede asociar niños",
+      });
+    }
 
     if (!childEmail) {
       return res.status(400).json({
@@ -32,7 +41,7 @@ const linkChildToParent = async (req, res) => {
 
     const result = await parentChildService.linkChildToParent(
       parentId,
-      childEmail,
+      childEmail
     );
 
     if (!result) {
@@ -44,7 +53,6 @@ const linkChildToParent = async (req, res) => {
     res.status(201).json(result);
   } catch (error) {
     console.error("Error asociando niño:", error);
-
     res.status(500).json({
       message: "Error asociando niño al cuidador",
     });
@@ -52,6 +60,6 @@ const linkChildToParent = async (req, res) => {
 };
 
 module.exports = {
-  getChildrenByParent,
-  linkChildToParent,
+  getMyChildren,
+  linkChildToMe,
 };

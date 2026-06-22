@@ -1,12 +1,14 @@
 const express = require("express");
 const router = express.Router();
 
+const authMiddleware = require("../middleware/authMiddleware");
+
 const {
-  getChildrenByParent,
-  linkChildToParent
+  getMyChildren,
+  linkChildToMe,
 } = require("../controllers/parentChildController");
 
-router.get("/:parentId/children", getChildrenByParent);
-router.post("/:parentId/children", linkChildToParent);
+router.get("/me/children", authMiddleware, getMyChildren);
+router.post("/me/children", authMiddleware, linkChildToMe);
 
 module.exports = router;

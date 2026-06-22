@@ -1,10 +1,14 @@
 const express = require("express");
 const router = express.Router();
 
+const authMiddleware = require("../middleware/authMiddleware");
+
 const {
-  generateReport,
+  generateMyReport,
+  generateChildReport,
 } = require("../controllers/reportController");
 
-router.get("/:userId", generateReport);
+router.get("/me", authMiddleware, generateMyReport);
+router.get("/children/:childId", authMiddleware, generateChildReport);
 
 module.exports = router;

@@ -22,6 +22,7 @@ router.post(
 
 router.post(
   "/contact-conversation",
+  authMiddleware,
   generateContactConversation
 );
 
