@@ -160,9 +160,55 @@ const getContactConversationsByContactId = async (req, res) => {
     });
   }
 };
+const getContactConversationProgress = async (req, res) => {
+  try {
+    const user_id = req.user.id;
+
+    const totalResult = await pool.query(
+      `
+      SELECT COUNT(*) AS total
+      FROM "FloFlo".user_contact_conversation
+      WHERE user_id = $1
+      `,
+      [user_id]
+    );
+
+    const favoriteResult = await pool.query(
+      `
+      SELECT COUNT(*) AS favorites
+      FROM "FloFlo".user_contact_conversation
+      WHERE user_id = $1
+      AND is_favorite = true
+      `,
+      [user_id]
+    );
+
+    const recentResult = await pool.query(
+      `
+      SELECT COUNT(*) AS recent
+      FROM "FloFlo".user_contact_conversation
+      WHERE user_id = $1
+      AND created_at >= NOW() - INTERVAL '7 days'
+      `,
+      [user_id]
+    );
+
+    res.json({
+      total: Number(totalResult.rows[0].total),
+      favorites: Number(favoriteResult.rows[0].favorites),
+      recent: Number(recentResult.rows[0].recent),
+    });
+  } catch (error) {
+    console.error("Error obteniendo progreso de conversaciones:", error);
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
 
 module.exports = {
   getAllContactConversations,
   createContactConversation,
-  getContactConversationsByContactId
+  getContactConversationsByContactId,
+  getContactConversationProgress
 };

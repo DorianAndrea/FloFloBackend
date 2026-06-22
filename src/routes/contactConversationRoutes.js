@@ -4,12 +4,15 @@ const authMiddleware = require("../middleware/authMiddleware");
 const {
   getAllContactConversations,
   getContactConversationsByContactId,
+  getContactConversationProgress,
   createContactConversation,
 } = require("../controllers/contactConversationController");
 
 const router = express.Router();
 
 router.get("/", authMiddleware, getAllContactConversations);
+
+router.get("/progress", authMiddleware, getContactConversationProgress);
 
 router.get(
   "/contact/:contactId",
