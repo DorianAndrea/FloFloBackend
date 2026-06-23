@@ -314,6 +314,50 @@ const completeContactConversation = async (req, res) => {
     });
   }
 };
+const toggleFavoriteContactConversation = async (req, res) => {
+  try {
+    const user_id = req.user.id;
+    const conversationId = Number(req.params.id);
+
+    if (!Number.isInteger(conversationId) || conversationId <= 0) {
+      return res.status(400).json({
+        message: "ID de conversación inválido",
+      });
+    }
+
+    const result = await pool.query(
+      `
+      UPDATE "FloFlo".user_contact_conversation
+      SET
+        is_favorite = NOT COALESCE(is_favorite, false),
+        updated_at = NOW()
+      WHERE id = $1
+      AND user_id = $2
+      RETURNING *
+      `,
+      [conversationId, user_id],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "Conversación no encontrada para este usuario",
+      });
+    }
+
+    res.json({
+      message: result.rows[0].is_favorite
+        ? "Conversación marcada como favorita"
+        : "Conversación quitada de favoritas",
+      conversation: result.rows[0],
+    });
+  } catch (error) {
+    console.error("Error cambiando favorito de conversación de contacto:", error);
+
+    res.status(500).json({
+      message: "Error actualizando favorito",
+    });
+  }
+};
 
 module.exports = {
   getAllContactConversations,
@@ -321,4 +365,5 @@ module.exports = {
   getContactConversationsByContactId,
   getContactConversationProgress,
   completeContactConversation,
+  toggleFavoriteContactConversation,
 };
