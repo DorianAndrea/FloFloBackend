@@ -16,11 +16,116 @@ const validateUserId = (userId) => {
 };
 
 const getCount = (result) => {
-  return Number(result.rows[0]?.count || 0);
+  return Number(result?.rows?.[0]?.count || 0);
 };
 
 const getFirstRow = (result) => {
-  return result.rows[0] || null;
+  return result?.rows?.[0] || null;
+};
+
+const hasText = (value) => {
+  return typeof value === "string" && value.trim().length > 0;
+};
+
+const cleanText = (value) => {
+  return typeof value === "string" ? value.trim() : "";
+};
+
+const buildSensoryRecommendations = (sensoryProfile, dashboardData) => {
+  if (!sensoryProfile) return [];
+
+  const recommendations = [];
+  const sensitivities = [];
+
+  if (hasText(sensoryProfile.noise_sensitivity)) {
+    sensitivities.push(`ruido: ${cleanText(sensoryProfile.noise_sensitivity)}`);
+  }
+
+  if (hasText(sensoryProfile.light_sensitivity)) {
+    sensitivities.push(`luz: ${cleanText(sensoryProfile.light_sensitivity)}`);
+  }
+
+  if (hasText(sensoryProfile.texture_sensitivity)) {
+    sensitivities.push(
+      `texturas: ${cleanText(sensoryProfile.texture_sensitivity)}`
+    );
+  }
+
+  if (hasText(sensoryProfile.crowd_sensitivity)) {
+    sensitivities.push(
+      `multitudes: ${cleanText(sensoryProfile.crowd_sensitivity)}`
+    );
+  }
+
+  if (sensitivities.length > 0) {
+    recommendations.push({
+      title: "Considerar su perfil sensorial",
+      message: `Antes de planificar rutinas, salidas o conversaciones, recuerda sus sensibilidades principales: ${sensitivities.join(
+        "; "
+      )}. Esto puede ayudar a prevenir sobrecargas.`,
+      icon: "🧩",
+    });
+  }
+
+  const calmingSupports = [];
+
+  if (hasText(sensoryProfile.calming_items)) {
+    calmingSupports.push(
+      `objetos que ayudan: ${cleanText(sensoryProfile.calming_items)}`
+    );
+  }
+
+  if (hasText(sensoryProfile.calming_activities)) {
+    calmingSupports.push(
+      `actividades que ayudan: ${cleanText(
+        sensoryProfile.calming_activities
+      )}`
+    );
+  }
+
+  if (calmingSupports.length > 0) {
+    recommendations.push({
+      title: "Preparar apoyos calmantes",
+      message: `Cuando notes cansancio, ansiedad o incomodidad, puedes apoyarte en ${calmingSupports.join(
+        "; "
+      )}. Tenerlos disponibles antes de una situación difícil puede facilitar la regulación.`,
+      icon: "🧸",
+    });
+  }
+
+  if (
+    hasText(sensoryProfile.stress_signals) ||
+    hasText(sensoryProfile.support_strategies)
+  ) {
+    recommendations.push({
+      title: "Observar señales de sobrecarga",
+      message: `Señales a observar: ${
+        cleanText(sensoryProfile.stress_signals) ||
+        "cambios en conducta, cansancio o evitación"
+      }. Estrategias sugeridas: ${
+        cleanText(sensoryProfile.support_strategies) ||
+        "hablar con calma, anticipar cambios y ofrecer pausas"
+      }.`,
+      icon: "🚦",
+    });
+  }
+
+  const latestMoodName = dashboardData.latestMood?.mood_name;
+
+  if (
+    ["Ansioso", "Asustado", "Triste", "Enojado"].includes(latestMoodName) &&
+    hasText(sensoryProfile.support_strategies)
+  ) {
+    recommendations.push({
+      title: `Apoyo ante emoción reciente: ${latestMoodName}`,
+      message: `Como la última emoción registrada fue "${latestMoodName}", puede ser útil aplicar una estrategia conocida para este niño: ${cleanText(
+        sensoryProfile.support_strategies
+      )}.`,
+      icon: "💜",
+    });
+  }
+
+  return recommendations;
 };
 
 const getParentDashboard = async (userId) => {
@@ -43,6 +148,7 @@ const getParentDashboard = async (userId) => {
     nextAchievement,
     emotionalTrend,
     activityCalendar,
+    sensoryProfile,
   ] = await Promise.all([
     pool.query(
       `
@@ -354,6 +460,25 @@ const getParentDashboard = async (userId) => {
       `,
       [userIdNumber]
     ),
+
+    pool.query(
+      `
+      SELECT
+        noise_sensitivity,
+        light_sensitivity,
+        texture_sensitivity,
+        crowd_sensitivity,
+        calming_items,
+        calming_activities,
+        stress_signals,
+        support_strategies,
+        notes
+      FROM "FloFlo".sensory_profile
+      WHERE user_id = $1
+      LIMIT 1
+      `,
+      [userIdNumber]
+    ),
   ]);
 
   const dashboardData = {
@@ -368,6 +493,12 @@ const getParentDashboard = async (userId) => {
     latestPlace: getFirstRow(latestPlace),
     latestContactConversation: getFirstRow(latestContactConversation),
   };
+
+  const sensoryProfileData = getFirstRow(sensoryProfile);
+  const sensoryRecommendations = buildSensoryRecommendations(
+    sensoryProfileData,
+    dashboardData
+  );
 
   const alerts = [];
 
@@ -416,14 +547,19 @@ const getParentDashboard = async (userId) => {
     });
   }
 
-  let recommendations = [];
+  let aiRecommendations = [];
 
   try {
-    recommendations = await generateParentRecommendations(dashboardData);
+    const generatedRecommendations =
+      await generateParentRecommendations(dashboardData);
+
+    aiRecommendations = Array.isArray(generatedRecommendations)
+      ? generatedRecommendations
+      : [];
   } catch (error) {
     console.error("Error generando recomendaciones IA:", error.message);
 
-    recommendations = [
+    aiRecommendations = [
       {
         title: "Revisar avances",
         message:
@@ -432,6 +568,8 @@ const getParentDashboard = async (userId) => {
       },
     ];
   }
+
+  const recommendations = [...sensoryRecommendations, ...aiRecommendations];
 
   return {
     ...dashboardData,
