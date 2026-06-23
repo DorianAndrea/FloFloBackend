@@ -1,6 +1,7 @@
 const pool = require("../database/db");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 
 const createToken = (user) => {
   return jwt.sign(
@@ -16,12 +17,41 @@ const createToken = (user) => {
   );
 };
 
+const normalizeEmail = (email) => {
+  return String(email || "")
+    .trim()
+    .toLowerCase();
+};
+
+const normalizeText = (value) => {
+  return String(value || "").trim();
+};
+const createResetToken = () => {
+  const rawToken = crypto.randomBytes(32).toString("hex");
+
+  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+  return {
+    rawToken,
+    tokenHash,
+  };
+};
+
+const hashResetToken = (token) => {
+  return crypto.createHash("sha256").update(token).digest("hex");
+};
+
 const register = async (req, res) => {
   try {
     const { firstName, lastName, rut, birth_date, email, password, role } =
       req.body;
 
     const avatar = req.file ? req.file.path : null;
+
+    const cleanFirstName = normalizeText(firstName);
+    const cleanLastName = normalizeText(lastName);
+    const cleanEmail = normalizeEmail(email);
+    const cleanPassword = String(password || "");
 
     const roleValue = String(role || "").toLowerCase();
 
@@ -32,9 +62,15 @@ const register = async (req, res) => {
         ? "parent"
         : "child";
 
-    if (!firstName || !lastName || !email || !password) {
+    if (!cleanFirstName || !cleanLastName || !cleanEmail || !cleanPassword) {
       return res.status(400).json({
         message: "Todos los campos obligatorios deben ser completados",
+      });
+    }
+
+    if (cleanPassword.length < 6) {
+      return res.status(400).json({
+        message: "La contraseña debe tener al menos 6 caracteres",
       });
     }
 
@@ -42,9 +78,9 @@ const register = async (req, res) => {
       `
       SELECT id
       FROM "FloFlo"."user"
-      WHERE email = $1
+      WHERE LOWER(email) = LOWER($1)
       `,
-      [email],
+      [cleanEmail],
     );
 
     if (userExists.rows.length > 0) {
@@ -53,7 +89,7 @@ const register = async (req, res) => {
       });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(cleanPassword, 10);
 
     const result = await pool.query(
       `
@@ -84,11 +120,11 @@ const register = async (req, res) => {
       RETURNING id, "firstName", "lastName", rut, birth_date, email, avatar, role
       `,
       [
-        firstName,
-        lastName,
+        cleanFirstName,
+        cleanLastName,
         rut || null,
         birth_date || null,
-        email,
+        cleanEmail,
         hashedPassword,
         avatar || null,
         userRole,
@@ -103,10 +139,10 @@ const register = async (req, res) => {
       user,
     });
   } catch (error) {
-    console.error(error);
+    console.error("Error registrando usuario:", error);
 
     res.status(500).json({
-      message: error.message,
+      message: "Error al registrar usuario",
     });
   }
 };
@@ -115,7 +151,10 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body || {};
 
-    if (!email || !password) {
+    const cleanEmail = normalizeEmail(email);
+    const cleanPassword = String(password || "");
+
+    if (!cleanEmail || !cleanPassword) {
       return res.status(400).json({
         message: "Email y contraseña son obligatorios",
       });
@@ -125,30 +164,40 @@ const login = async (req, res) => {
       `
       SELECT *
       FROM "FloFlo"."user"
-      WHERE email = $1
+      WHERE LOWER(email) = LOWER($1)
+      LIMIT 1
       `,
-      [email],
+      [cleanEmail],
     );
 
     if (result.rows.length === 0) {
       return res.status(401).json({
-        message: "Usuario no encontrado",
+        message: "Correo o contraseña incorrectos",
       });
     }
 
     const user = result.rows[0];
 
-    const validPassword = await bcrypt.compare(password, user.password);
+    if (!user.password || typeof user.password !== "string") {
+      console.warn(
+        `Intento de login con usuario sin contraseña configurada: ${user.email}`,
+      );
+
+      return res.status(401).json({
+        message:
+          "Este usuario no tiene contraseña configurada. Debes recuperar o restablecer la clave.",
+      });
+    }
+
+    const validPassword = await bcrypt.compare(cleanPassword, user.password);
 
     if (!validPassword) {
       return res.status(401).json({
-        message: "Contraseña incorrecta",
+        message: "Correo o contraseña incorrectos",
       });
     }
 
     const token = createToken(user);
-    console.log("USER LOGIN:", user);
-    console.log("ROLE LOGIN:", user.role);
 
     res.json({
       token,
@@ -156,16 +205,18 @@ const login = async (req, res) => {
         id: user.id,
         firstName: user.firstName,
         lastName: user.lastName,
+        rut: user.rut,
+        birth_date: user.birth_date,
         email: user.email,
         avatar: user.avatar,
         role: user.role,
       },
     });
   } catch (error) {
-    console.error(error);
+    console.error("Error iniciando sesión:", error);
 
     res.status(500).json({
-      message: error.message,
+      message: "Error al iniciar sesión",
     });
   }
 };
@@ -200,9 +251,10 @@ const getMe = async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (error) {
-    console.error(error);
+    console.error("Error obteniendo perfil:", error);
+
     res.status(500).json({
-      message: error.message,
+      message: "Error obteniendo perfil",
     });
   }
 };
@@ -213,9 +265,12 @@ const updateMe = async (req, res) => {
 
     const { firstName, lastName, rut, birth_date, role } = req.body;
 
+    const cleanFirstName = normalizeText(firstName);
+    const cleanLastName = normalizeText(lastName);
+
     const userRole = role === "parent" ? "parent" : "child";
 
-    if (!firstName || !lastName) {
+    if (!cleanFirstName || !cleanLastName) {
       return res.status(400).json({
         message: "Nombre y apellido son obligatorios",
       });
@@ -257,8 +312,8 @@ const updateMe = async (req, res) => {
         created_at
       `,
       [
-        firstName,
-        lastName,
+        cleanFirstName,
+        cleanLastName,
         rut || null,
         birth_date || null,
         avatar,
@@ -267,11 +322,217 @@ const updateMe = async (req, res) => {
       ],
     );
 
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "Usuario no encontrado",
+      });
+    }
+
     res.json(result.rows[0]);
   } catch (error) {
-    console.error(error);
+    console.error("Error actualizando perfil:", error);
+
     res.status(500).json({
-      message: error.message,
+      message: "Error actualizando perfil",
+    });
+  }
+};
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    const cleanEmail = normalizeEmail(email);
+
+    if (!cleanEmail) {
+      return res.status(400).json({
+        message: "El correo es obligatorio",
+      });
+    }
+
+    const userResult = await pool.query(
+      `
+      SELECT id, email, "firstName", "lastName"
+      FROM "FloFlo"."user"
+      WHERE LOWER(email) = LOWER($1)
+      LIMIT 1
+      `,
+      [cleanEmail],
+    );
+
+    const genericResponse = {
+      message:
+        "Si el correo está registrado, se generará una solicitud para restablecer la contraseña.",
+    };
+
+    if (userResult.rows.length === 0) {
+      return res.json(genericResponse);
+    }
+
+    const user = userResult.rows[0];
+
+    const { rawToken, tokenHash } = createResetToken();
+
+    await pool.query(
+      `
+      UPDATE "FloFlo".password_reset_token
+      SET used_at = NOW()
+      WHERE user_id = $1
+      AND used_at IS NULL
+      `,
+      [user.id],
+    );
+
+    await pool.query(
+      `
+      INSERT INTO "FloFlo".password_reset_token
+      (
+        user_id,
+        token_hash,
+        expires_at,
+        created_at
+      )
+      VALUES
+      (
+        $1,
+        $2,
+        NOW() + INTERVAL '30 minutes',
+        NOW()
+      )
+      `,
+      [user.id, tokenHash],
+    );
+
+    const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/reset-password?token=${rawToken}`;
+
+    console.log("PASSWORD RESET URL:", resetUrl);
+
+    const response = {
+      ...genericResponse,
+    };
+
+    if (
+      process.env.NODE_ENV !== "production" ||
+      process.env.ALLOW_RESET_TOKEN_RESPONSE === "true"
+    ) {
+      response.resetToken = rawToken;
+      response.resetUrl = resetUrl;
+    }
+
+    res.json(response);
+  } catch (error) {
+    console.error("Error solicitando recuperación de clave:", error);
+
+    res.status(500).json({
+      message: "Error solicitando recuperación de clave",
+    });
+  }
+};
+const resetPassword = async (req, res) => {
+  try {
+    const { token, newPassword } = req.body || {};
+
+    const cleanToken = String(token || "").trim();
+    const cleanPassword = String(newPassword || "");
+
+    if (!cleanToken || !cleanPassword) {
+      return res.status(400).json({
+        message: "Token y nueva contraseña son obligatorios",
+      });
+    }
+
+    if (cleanPassword.length < 6) {
+      return res.status(400).json({
+        message: "La nueva contraseña debe tener al menos 6 caracteres",
+      });
+    }
+
+    const tokenHash = hashResetToken(cleanToken);
+
+    const tokenResult = await pool.query(
+      `
+      SELECT
+        prt.id,
+        prt.user_id,
+        prt.expires_at,
+        prt.used_at,
+        u.email
+      FROM "FloFlo".password_reset_token prt
+      JOIN "FloFlo"."user" u
+        ON u.id = prt.user_id
+      WHERE prt.token_hash = $1
+      LIMIT 1
+      `,
+      [tokenHash],
+    );
+
+    if (tokenResult.rows.length === 0) {
+      return res.status(400).json({
+        message: "El enlace de recuperación no es válido",
+      });
+    }
+
+    const resetToken = tokenResult.rows[0];
+
+    if (resetToken.used_at) {
+      return res.status(400).json({
+        message: "Este enlace de recuperación ya fue utilizado",
+      });
+    }
+
+    const isExpired = new Date(resetToken.expires_at).getTime() < Date.now();
+
+    if (isExpired) {
+      return res.status(400).json({
+        message: "El enlace de recuperación expiró",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(cleanPassword, 10);
+
+    await pool.query("BEGIN");
+
+    await pool.query(
+      `
+      UPDATE "FloFlo"."user"
+      SET
+        password = $1,
+        updated_at = NOW()
+      WHERE id = $2
+      `,
+      [hashedPassword, resetToken.user_id],
+    );
+
+    await pool.query(
+      `
+      UPDATE "FloFlo".password_reset_token
+      SET used_at = NOW()
+      WHERE id = $1
+      `,
+      [resetToken.id],
+    );
+
+    await pool.query(
+      `
+      UPDATE "FloFlo".password_reset_token
+      SET used_at = NOW()
+      WHERE user_id = $1
+      AND used_at IS NULL
+      AND id <> $2
+      `,
+      [resetToken.user_id, resetToken.id],
+    );
+
+    await pool.query("COMMIT");
+
+    res.json({
+      message: "Contraseña actualizada correctamente",
+    });
+  } catch (error) {
+    await pool.query("ROLLBACK").catch(() => {});
+
+    console.error("Error restableciendo contraseña:", error);
+
+    res.status(500).json({
+      message: "Error restableciendo contraseña",
     });
   }
 };
@@ -281,4 +542,6 @@ module.exports = {
   login,
   getMe,
   updateMe,
+  forgotPassword,
+  resetPassword,
 };
