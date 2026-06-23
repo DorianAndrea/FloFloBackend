@@ -2,6 +2,7 @@ const pool = require("../database/db");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
+const { sendPasswordResetEmail } = require("../services/emailService");
 
 const createToken = (user) => {
   return jwt.sign(
@@ -401,7 +402,15 @@ const forgotPassword = async (req, res) => {
       [user.id, tokenHash],
     );
 
-    const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/reset-password?token=${rawToken}`;
+    const resetUrl = `${
+      process.env.FRONTEND_URL || "http://localhost:5173"
+    }/reset-password?token=${rawToken}`;
+
+    await sendPasswordResetEmail({
+      to: user.email,
+      firstName: user.firstName,
+      resetUrl,
+    });
 
     console.log("PASSWORD RESET URL:", resetUrl);
 
