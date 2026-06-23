@@ -43,7 +43,7 @@ const createContactConversation = async (req, res) => {
     } = req.body;
 
     const finalContactId = Number(
-      contact_id || contactId || user_contact_id || userContactId
+      contact_id || contactId || user_contact_id || userContactId,
     );
 
     const finalWhatToSay = what_to_say || whatToSay;
@@ -62,7 +62,7 @@ const createContactConversation = async (req, res) => {
       AND user_id = $2
       LIMIT 1
       `,
-      [finalContactId, user_id]
+      [finalContactId, user_id],
     );
 
     if (contactResult.rows.length === 0) {
@@ -99,7 +99,7 @@ const createContactConversation = async (req, res) => {
         wrong_answer_1 || null,
         wrong_answer_2 || null,
         reminder || null,
-      ]
+      ],
     );
 
     res.status(201).json({
@@ -132,7 +132,7 @@ const getContactConversationsByContactId = async (req, res) => {
       AND user_id = $2
       LIMIT 1
       `,
-      [contactId, user_id]
+      [contactId, user_id],
     );
 
     if (contactResult.rows.length === 0) {
@@ -149,7 +149,7 @@ const getContactConversationsByContactId = async (req, res) => {
       AND user_contact_id = $2
       ORDER BY created_at DESC
       `,
-      [user_id, contactId]
+      [user_id, contactId],
     );
 
     res.json(result.rows);
@@ -164,44 +164,153 @@ const getContactConversationProgress = async (req, res) => {
   try {
     const user_id = req.user.id;
 
-    const totalResult = await pool.query(
+    const result = await pool.query(
       `
-      SELECT COUNT(*) AS total
-      FROM "FloFlo".user_contact_conversation
+      SELECT
+        contact_conversation_id,
+        completed_at
+      FROM "FloFlo".user_contact_conversation_progress
       WHERE user_id = $1
+      ORDER BY completed_at DESC
       `,
-      [user_id]
+      [user_id],
     );
 
-    const favoriteResult = await pool.query(
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Error obteniendo progreso de conversaciones de contacto:", error);
+
+    res.status(500).json({
+      message: "Error obteniendo progreso de conversaciones de contacto",
+    });
+  }
+};
+
+const completeContactConversation = async (req, res) => {
+  try {
+    const user_id = req.user.id;
+    const conversationId = Number(req.params.id);
+
+    if (!Number.isInteger(conversationId) || conversationId <= 0) {
+      return res.status(400).json({
+        message: "ID de conversación inválido",
+      });
+    }
+
+    const conversationResult = await pool.query(
       `
-      SELECT COUNT(*) AS favorites
+      SELECT id
       FROM "FloFlo".user_contact_conversation
-      WHERE user_id = $1
-      AND is_favorite = true
+      WHERE id = $1
+      AND user_id = $2
+      LIMIT 1
       `,
-      [user_id]
+      [conversationId, user_id],
     );
 
-    const recentResult = await pool.query(
+    if (conversationResult.rows.length === 0) {
+      return res.status(404).json({
+        message: "Conversación no encontrada para este usuario",
+      });
+    }
+
+    await pool.query("BEGIN");
+
+    const progressInsert = await pool.query(
       `
-      SELECT COUNT(*) AS recent
-      FROM "FloFlo".user_contact_conversation
-      WHERE user_id = $1
-      AND created_at >= NOW() - INTERVAL '7 days'
+      INSERT INTO "FloFlo".user_contact_conversation_progress
+      (
+        user_id,
+        contact_conversation_id,
+        completed_at
+      )
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (user_id, contact_conversation_id)
+      DO NOTHING
+      RETURNING *
       `,
-      [user_id]
+      [user_id, conversationId],
     );
+
+    const alreadyCompleted = progressInsert.rows.length === 0;
+
+    let progressResult;
+
+    if (!alreadyCompleted) {
+      progressResult = await pool.query(
+        `
+        UPDATE "FloFlo".user_progress
+        SET
+          completed_conversations = COALESCE(completed_conversations, 0) + 1,
+          points = COALESCE(points, 0) + 10,
+          updated_at = NOW()
+        WHERE user_id = $1
+        RETURNING *
+        `,
+        [user_id],
+      );
+
+      if (progressResult.rows.length === 0) {
+        progressResult = await pool.query(
+          `
+          INSERT INTO "FloFlo".user_progress
+          (
+            user_id,
+            points,
+            level,
+            completed_conversations,
+            completed_places,
+            completed_routines,
+            completed_moods,
+            created_at,
+            updated_at
+          )
+          VALUES
+          (
+            $1,
+            10,
+            1,
+            1,
+            0,
+            0,
+            0,
+            NOW(),
+            NOW()
+          )
+          RETURNING *
+          `,
+          [user_id],
+        );
+      }
+    } else {
+      progressResult = await pool.query(
+        `
+        SELECT *
+        FROM "FloFlo".user_progress
+        WHERE user_id = $1
+        LIMIT 1
+        `,
+        [user_id],
+      );
+    }
+
+    await pool.query("COMMIT");
 
     res.json({
-      total: Number(totalResult.rows[0].total),
-      favorites: Number(favoriteResult.rows[0].favorites),
-      recent: Number(recentResult.rows[0].recent),
+      message: alreadyCompleted
+        ? "Conversación ya estaba completada"
+        : "Conversación completada correctamente",
+      conversationId,
+      alreadyCompleted,
+      progress: progressResult.rows[0] || null,
     });
   } catch (error) {
-    console.error("Error obteniendo progreso de conversaciones:", error);
+    await pool.query("ROLLBACK").catch(() => {});
+
+    console.error("Error completando conversación:", error);
+
     res.status(500).json({
-      message: error.message,
+      message: "Error completando conversación",
     });
   }
 };
@@ -210,5 +319,6 @@ module.exports = {
   getAllContactConversations,
   createContactConversation,
   getContactConversationsByContactId,
-  getContactConversationProgress
+  getContactConversationProgress,
+  completeContactConversation,
 };

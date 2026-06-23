@@ -6,6 +6,7 @@ const {
   getContactConversationsByContactId,
   getContactConversationProgress,
   createContactConversation,
+  completeContactConversation,
 } = require("../controllers/contactConversationController");
 
 const router = express.Router();
@@ -21,5 +22,7 @@ router.get(
 );
 
 router.post("/", authMiddleware, createContactConversation);
+
+router.post("/:id/complete", authMiddleware, completeContactConversation);
 
 module.exports = router;
