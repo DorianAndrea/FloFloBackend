@@ -47,13 +47,13 @@ const buildSensoryRecommendations = (sensoryProfile, dashboardData) => {
 
   if (hasText(sensoryProfile.texture_sensitivity)) {
     sensitivities.push(
-      `texturas: ${cleanText(sensoryProfile.texture_sensitivity)}`
+      `texturas: ${cleanText(sensoryProfile.texture_sensitivity)}`,
     );
   }
 
   if (hasText(sensoryProfile.crowd_sensitivity)) {
     sensitivities.push(
-      `multitudes: ${cleanText(sensoryProfile.crowd_sensitivity)}`
+      `multitudes: ${cleanText(sensoryProfile.crowd_sensitivity)}`,
     );
   }
 
@@ -61,7 +61,7 @@ const buildSensoryRecommendations = (sensoryProfile, dashboardData) => {
     recommendations.push({
       title: "Considerar su perfil sensorial",
       message: `Antes de planificar rutinas, salidas o conversaciones, recuerda sus sensibilidades principales: ${sensitivities.join(
-        "; "
+        "; ",
       )}. Esto puede ayudar a prevenir sobrecargas.`,
       icon: "🧩",
     });
@@ -71,15 +71,13 @@ const buildSensoryRecommendations = (sensoryProfile, dashboardData) => {
 
   if (hasText(sensoryProfile.calming_items)) {
     calmingSupports.push(
-      `objetos que ayudan: ${cleanText(sensoryProfile.calming_items)}`
+      `objetos que ayudan: ${cleanText(sensoryProfile.calming_items)}`,
     );
   }
 
   if (hasText(sensoryProfile.calming_activities)) {
     calmingSupports.push(
-      `actividades que ayudan: ${cleanText(
-        sensoryProfile.calming_activities
-      )}`
+      `actividades que ayudan: ${cleanText(sensoryProfile.calming_activities)}`,
     );
   }
 
@@ -87,7 +85,7 @@ const buildSensoryRecommendations = (sensoryProfile, dashboardData) => {
     recommendations.push({
       title: "Preparar apoyos calmantes",
       message: `Cuando notes cansancio, ansiedad o incomodidad, puedes apoyarte en ${calmingSupports.join(
-        "; "
+        "; ",
       )}. Tenerlos disponibles antes de una situación difícil puede facilitar la regulación.`,
       icon: "🧸",
     });
@@ -119,7 +117,7 @@ const buildSensoryRecommendations = (sensoryProfile, dashboardData) => {
     recommendations.push({
       title: `Apoyo ante emoción reciente: ${latestMoodName}`,
       message: `Como la última emoción registrada fue "${latestMoodName}", puede ser útil aplicar una estrategia conocida para este niño: ${cleanText(
-        sensoryProfile.support_strategies
+        sensoryProfile.support_strategies,
       )}.`,
       icon: "💜",
     });
@@ -127,11 +125,65 @@ const buildSensoryRecommendations = (sensoryProfile, dashboardData) => {
 
   return recommendations;
 };
+const buildSensoryAlerts = (sensoryProfile, dashboardData) => {
+  if (!sensoryProfile) return [];
+
+  const alerts = [];
+
+  const latestMoodName = dashboardData.latestMood?.mood_name;
+
+  const difficultMoods = ["Ansioso", "Asustado", "Enojado", "Triste"];
+
+  const hasSensorySensitivity =
+    hasText(sensoryProfile.noise_sensitivity) ||
+    hasText(sensoryProfile.light_sensitivity) ||
+    hasText(sensoryProfile.texture_sensitivity) ||
+    hasText(sensoryProfile.crowd_sensitivity);
+
+  const hasStressInfo =
+    hasText(sensoryProfile.stress_signals) ||
+    hasText(sensoryProfile.support_strategies);
+
+  if (difficultMoods.includes(latestMoodName) && hasSensorySensitivity) {
+    alerts.push({
+      type: "warning",
+      title: "Posible sobrecarga sensorial",
+      message: `La última emoción registrada fue "${latestMoodName}". Como existe información de sensibilidad sensorial, conviene observar si hay estímulos como ruido, luz, texturas o multitudes que puedan estar influyendo.`,
+      icon: "🚦",
+    });
+  }
+
+  if (difficultMoods.includes(latestMoodName) && hasStressInfo) {
+    alerts.push({
+      type: "warning",
+      title: "Observar señales de estrés",
+      message: `Hay señales o estrategias registradas en el perfil sensorial. Señales a observar: ${
+        cleanText(sensoryProfile.stress_signals) ||
+        "cambios de conducta, evitación, llanto o cansancio"
+      }. Estrategias sugeridas: ${
+        cleanText(sensoryProfile.support_strategies) ||
+        "hablar con calma, anticipar cambios y ofrecer una pausa"
+      }.`,
+      icon: "💜",
+    });
+  }
+
+  if (hasText(sensoryProfile.crowd_sensitivity) && dashboardData.latestPlace) {
+    alerts.push({
+      type: "info",
+      title: "Considerar ambiente del lugar",
+      message: `El último lugar registrado fue "${dashboardData.latestPlace.name}". Como existe sensibilidad a multitudes, puede ser útil anticipar la visita, elegir horarios tranquilos o preparar una pausa.`,
+      icon: "📍",
+    });
+  }
+
+  return alerts;
+};
 
 const getParentDashboard = async (userId) => {
   const userIdNumber = validateUserId(userId);
 
-  const [
+    const [
     emotions,
     routines,
     places,
@@ -156,7 +208,7 @@ const getParentDashboard = async (userId) => {
       FROM "FloFlo".mood 
       WHERE user_id = $1
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
 
     pool.query(
@@ -165,7 +217,7 @@ const getParentDashboard = async (userId) => {
       FROM "FloFlo".routine 
       WHERE user_id = $1
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
 
     pool.query(
@@ -174,7 +226,7 @@ const getParentDashboard = async (userId) => {
       FROM "FloFlo".place 
       WHERE user_id = $1
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
 
     pool.query(
@@ -183,7 +235,7 @@ const getParentDashboard = async (userId) => {
       FROM "FloFlo".user_contact 
       WHERE user_id = $1
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
 
     pool.query(
@@ -200,7 +252,7 @@ const getParentDashboard = async (userId) => {
           WHERE user_id = $1
         ) AS count
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
 
     pool.query(
@@ -209,7 +261,7 @@ const getParentDashboard = async (userId) => {
       FROM "FloFlo".user_achievement
       WHERE user_id = $1
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
 
     pool.query(
@@ -227,7 +279,7 @@ const getParentDashboard = async (userId) => {
       ORDER BY m.created_at DESC
       LIMIT 1
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
 
     pool.query(
@@ -244,7 +296,7 @@ const getParentDashboard = async (userId) => {
       ORDER BY created_at DESC
       LIMIT 1
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
 
     pool.query(
@@ -259,7 +311,7 @@ const getParentDashboard = async (userId) => {
       ORDER BY created_at DESC
       LIMIT 1
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
 
     pool.query(
@@ -275,7 +327,7 @@ const getParentDashboard = async (userId) => {
       ORDER BY created_at DESC
       LIMIT 1
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
 
     pool.query(
@@ -291,7 +343,7 @@ const getParentDashboard = async (userId) => {
       GROUP BY mt.mood_name, mt.icon
       ORDER BY count DESC
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
 
     pool.query(
@@ -345,7 +397,7 @@ const getParentDashboard = async (userId) => {
       ORDER BY created_at DESC
       LIMIT 6
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
 
     pool.query(
@@ -363,7 +415,7 @@ const getParentDashboard = async (userId) => {
       ORDER BY updated_at DESC
       LIMIT 5
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
 
     pool.query(
@@ -397,7 +449,7 @@ const getParentDashboard = async (userId) => {
       ORDER BY a.required_value ASC
       LIMIT 1
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
 
     pool.query(
@@ -423,7 +475,7 @@ const getParentDashboard = async (userId) => {
       GROUP BY mt.mood_name, mt.icon
       ORDER BY current_week DESC
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
 
     pool.query(
@@ -458,7 +510,7 @@ const getParentDashboard = async (userId) => {
       GROUP BY DATE(created_at)
       ORDER BY activity_date ASC
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
 
     pool.query(
@@ -477,11 +529,27 @@ const getParentDashboard = async (userId) => {
       WHERE user_id = $1
       LIMIT 1
       `,
-      [userIdNumber]
+      [userIdNumber],
     ),
   ]);
+  const userInfo = await pool.query(
+    `
+    SELECT "firstName", "lastName", email
+    FROM "FloFlo".user
+    WHERE id = $1
+    LIMIT 1
+    `,
+    [userIdNumber],
+  );
+
+  const userInfoData = getFirstRow(userInfo);
+
+  const childName = `${userInfoData?.firstName || ""} ${
+    userInfoData?.lastName || ""
+  }`.trim();
 
   const dashboardData = {
+    childName: childName || "el niño/la niña",
     emotions: getCount(emotions),
     routines: getCount(routines),
     places: getCount(places),
@@ -495,12 +563,15 @@ const getParentDashboard = async (userId) => {
   };
 
   const sensoryProfileData = getFirstRow(sensoryProfile);
+
   const sensoryRecommendations = buildSensoryRecommendations(
     sensoryProfileData,
-    dashboardData
+    dashboardData,
   );
 
+  const sensoryAlerts = buildSensoryAlerts(sensoryProfileData, dashboardData);
   const alerts = [];
+  alerts.push(...sensoryAlerts);
 
   if (dashboardData.emotions === 0) {
     alerts.push({
@@ -550,8 +621,13 @@ const getParentDashboard = async (userId) => {
   let aiRecommendations = [];
 
   try {
-    const generatedRecommendations =
-      await generateParentRecommendations(dashboardData);
+    const generatedRecommendations = await generateParentRecommendations(
+      dashboardData,
+      {
+        sensoryProfile: sensoryProfileData,
+        alerts: sensoryAlerts,
+      },
+    );
 
     aiRecommendations = Array.isArray(generatedRecommendations)
       ? generatedRecommendations
@@ -569,7 +645,8 @@ const getParentDashboard = async (userId) => {
     ];
   }
 
-  const recommendations = [...sensoryRecommendations, ...aiRecommendations];
+  const recommendations =
+    aiRecommendations.length > 0 ? aiRecommendations : sensoryRecommendations;
 
   return {
     ...dashboardData,
