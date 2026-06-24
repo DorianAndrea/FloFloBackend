@@ -2,6 +2,16 @@ const PDFDocument = require("pdfkit");
 const pool = require("../database/db");
 const parentDashboardService = require("../services/parentDashboardService");
 
+const COLORS = {
+  purple: "#4B367C",
+  purpleLight: "#F3ECFF",
+  text: "#111827",
+  muted: "#4B5563",
+  softGray: "#E5E7EB",
+  green: "#047857",
+  greenLight: "#ECFDF5",
+};
+
 const isValidId = (id) => {
   const numberId = Number(id);
   return Number.isInteger(numberId) && numberId > 0;
@@ -9,6 +19,10 @@ const isValidId = (id) => {
 
 const hasText = (value) => {
   return typeof value === "string" && value.trim().length > 0;
+};
+
+const safeText = (value, fallback = "Sin información registrada") => {
+  return hasText(value) ? String(value).trim() : fallback;
 };
 
 const getSensoryProfile = async (userId) => {
@@ -49,38 +63,132 @@ const hasSensoryProfileData = (profile) => {
   ].some(hasText);
 };
 
+const addFooter = (doc) => {
+  const bottom = doc.page.height - 45;
+
+  doc
+    .fontSize(9)
+    .font("Helvetica")
+    .fillColor("#9CA3AF")
+    .text("FloFlo - Reporte de acompañamiento familiar", 50, bottom, {
+      align: "center",
+      width: doc.page.width - 100,
+    });
+
+  doc.fillColor(COLORS.text);
+};
+
+const addSectionTitle = (doc, title) => {
+  doc.moveDown(1);
+
+  doc
+    .fontSize(18)
+    .font("Helvetica-Bold")
+    .fillColor(COLORS.purple)
+    .text(title);
+
+  doc
+    .moveTo(50, doc.y + 6)
+    .lineTo(doc.page.width - 50, doc.y + 6)
+    .strokeColor(COLORS.softGray)
+    .lineWidth(1)
+    .stroke();
+
+  doc.moveDown(1);
+  doc.fillColor(COLORS.text);
+};
+
 const addTextLine = (doc, label, value) => {
   if (!hasText(value)) return;
 
-  doc.fontSize(12).font("Helvetica-Bold").fillColor("#111827").text(`${label}:`, {
-    continued: true,
-  });
+  doc
+    .fontSize(11)
+    .font("Helvetica-Bold")
+    .fillColor(COLORS.text)
+    .text(`${label}:`, {
+      continued: true,
+    });
 
-  doc.font("Helvetica").fillColor("#4B5563").text(` ${value}`);
-  doc.moveDown(0.5);
+  doc.font("Helvetica").fillColor(COLORS.muted).text(` ${value}`);
+  doc.moveDown(0.45);
+};
+
+const addCover = (doc, user) => {
+  doc
+    .rect(0, 0, doc.page.width, 130)
+    .fill(COLORS.purpleLight);
+
+  doc
+    .fontSize(28)
+    .font("Helvetica-Bold")
+    .fillColor(COLORS.purple)
+    .text("Reporte de Progreso FloFlo", 50, 45);
+
+  doc
+    .fontSize(12)
+    .font("Helvetica")
+    .fillColor(COLORS.muted)
+    .text("Resumen familiar para acompañar avances, rutinas y apoyos.", 50, 82);
+
+  doc.y = 160;
+
+  doc
+    .fontSize(12)
+    .font("Helvetica")
+    .fillColor(COLORS.muted)
+    .text(`Fecha: ${new Date().toLocaleDateString("es-CL")}`);
+
+  doc.text(`Nombre: ${user?.firstName || ""} ${user?.lastName || ""}`);
+  doc.text(`Correo: ${user?.email || "Sin correo registrado"}`);
+
+  doc.moveDown(1.5);
+};
+
+const addSummaryToPdf = (doc, dashboard) => {
+  addSectionTitle(doc, "Resumen general");
+
+  const items = [
+    ["Emociones", dashboard.emotions],
+    ["Rutinas", dashboard.routines],
+    ["Lugares", dashboard.places],
+    ["Contactos", dashboard.contacts],
+    ["Conversaciones", dashboard.conversations],
+    ["Logros", dashboard.achievements],
+  ];
+
+  items.forEach(([label, value]) => {
+    doc
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .fillColor(COLORS.text)
+      .text(`${label}:`, {
+        continued: true,
+      });
+
+    doc
+      .font("Helvetica")
+      .fillColor(COLORS.muted)
+      .text(` ${value ?? 0}`);
+
+    doc.moveDown(0.35);
+  });
 };
 
 const addSensoryProfileToPdf = (doc, sensoryProfile) => {
-  doc.fontSize(18).font("Helvetica-Bold").fillColor("#111827").text("Perfil sensorial");
-  doc.moveDown();
+  addSectionTitle(doc, "Perfil sensorial");
 
   if (!hasSensoryProfileData(sensoryProfile)) {
     doc
       .fontSize(12)
       .font("Helvetica")
-      .fillColor("#4B5563")
+      .fillColor(COLORS.muted)
       .text("No hay perfil sensorial registrado todavía.");
 
-    doc.moveDown(2);
+    doc.moveDown(1);
     return;
   }
 
-  doc
-    .fontSize(14)
-    .font("Helvetica-Bold")
-    .fillColor("#111827")
-    .text("Sensibilidades principales");
-
+  doc.fontSize(13).font("Helvetica-Bold").fillColor(COLORS.text).text("Sensibilidades principales");
   doc.moveDown(0.5);
 
   addTextLine(doc, "Ruido", sensoryProfile.noise_sensitivity);
@@ -88,49 +196,28 @@ const addSensoryProfileToPdf = (doc, sensoryProfile) => {
   addTextLine(doc, "Texturas", sensoryProfile.texture_sensitivity);
   addTextLine(doc, "Multitudes", sensoryProfile.crowd_sensitivity);
 
-  doc.moveDown();
+  doc.moveDown(0.8);
 
-  doc
-    .fontSize(14)
-    .font("Helvetica-Bold")
-    .fillColor("#111827")
-    .text("Elementos y actividades que ayudan");
-
+  doc.fontSize(13).font("Helvetica-Bold").fillColor(COLORS.text).text("Elementos y actividades que ayudan");
   doc.moveDown(0.5);
 
   addTextLine(doc, "Objetos calmantes", sensoryProfile.calming_items);
   addTextLine(doc, "Actividades calmantes", sensoryProfile.calming_activities);
 
-  doc.moveDown();
+  doc.moveDown(0.8);
 
-  doc
-    .fontSize(14)
-    .font("Helvetica-Bold")
-    .fillColor("#111827")
-    .text("Señales de estrés");
-
+  doc.fontSize(13).font("Helvetica-Bold").fillColor(COLORS.text).text("Señales y estrategias");
   doc.moveDown(0.5);
 
   addTextLine(doc, "Señales observables", sensoryProfile.stress_signals);
-
-  doc.moveDown();
-
-  doc
-    .fontSize(14)
-    .font("Helvetica-Bold")
-    .fillColor("#111827")
-    .text("Estrategias de apoyo");
-
-  doc.moveDown(0.5);
-
   addTextLine(doc, "Estrategias", sensoryProfile.support_strategies);
   addTextLine(doc, "Notas", sensoryProfile.notes);
-
-  doc.moveDown(2);
 };
 
 const addWeeklySupportPlanToPdf = (doc, weeklySupportPlan) => {
   if (!weeklySupportPlan) return;
+
+  addSectionTitle(doc, "Plan de apoyo semanal");
 
   const days = Array.isArray(weeklySupportPlan.days)
     ? weeklySupportPlan.days
@@ -140,19 +227,11 @@ const addWeeklySupportPlanToPdf = (doc, weeklySupportPlan) => {
     ? weeklySupportPlan.tips
     : [];
 
-  doc
-    .fontSize(18)
-    .font("Helvetica-Bold")
-    .fillColor("#111827")
-    .text("Plan de apoyo semanal");
-
-  doc.moveDown(0.6);
-
   if (weeklySupportPlan.title) {
     doc
       .fontSize(13)
       .font("Helvetica-Bold")
-      .fillColor("#4B367C")
+      .fillColor(COLORS.purple)
       .text(weeklySupportPlan.title);
 
     doc.moveDown(0.5);
@@ -162,16 +241,14 @@ const addWeeklySupportPlanToPdf = (doc, weeklySupportPlan) => {
     doc
       .fontSize(12)
       .font("Helvetica-Bold")
-      .fillColor("#111827")
+      .fillColor(COLORS.text)
       .text("Enfoque de la semana:");
 
     doc
       .fontSize(11)
       .font("Helvetica")
-      .fillColor("#4B5563")
-      .text(weeklySupportPlan.focus, {
-        align: "left",
-      });
+      .fillColor(COLORS.muted)
+      .text(weeklySupportPlan.focus);
 
     doc.moveDown(0.8);
   }
@@ -180,23 +257,23 @@ const addWeeklySupportPlanToPdf = (doc, weeklySupportPlan) => {
     doc
       .fontSize(12)
       .font("Helvetica-Bold")
-      .fillColor("#111827")
+      .fillColor(COLORS.text)
       .text("Acciones sugeridas:");
 
-    doc.moveDown(0.4);
+    doc.moveDown(0.5);
 
     days.forEach((item) => {
       doc
         .fontSize(11)
         .font("Helvetica-Bold")
-        .fillColor("#4B367C")
-        .text(`${item.day || "Día"} - ${item.title || "Actividad sugerida"}`);
+        .fillColor(COLORS.purple)
+        .text(`${safeText(item.day, "Día")} - ${safeText(item.title, "Actividad sugerida")}`);
 
       if (item.action) {
         doc
           .fontSize(10)
           .font("Helvetica")
-          .fillColor("#4B5563")
+          .fillColor(COLORS.muted)
           .text(`Acción: ${item.action}`);
       }
 
@@ -208,17 +285,17 @@ const addWeeklySupportPlanToPdf = (doc, weeklySupportPlan) => {
           .text(`Por qué ayuda: ${item.reason}`);
       }
 
-      doc.moveDown(0.5);
+      doc.moveDown(0.55);
     });
   }
 
   if (tips.length > 0) {
-    doc.moveDown(0.3);
+    doc.moveDown(0.4);
 
     doc
       .fontSize(12)
       .font("Helvetica-Bold")
-      .fillColor("#111827")
+      .fillColor(COLORS.text)
       .text("Consejos rápidos:");
 
     doc.moveDown(0.3);
@@ -227,13 +304,69 @@ const addWeeklySupportPlanToPdf = (doc, weeklySupportPlan) => {
       doc
         .fontSize(10)
         .font("Helvetica")
-        .fillColor("#4B5563")
+        .fillColor(COLORS.muted)
         .text(`- ${tip}`);
     });
   }
 
-  doc.fillColor("#000000");
-  doc.moveDown(2);
+  doc.fillColor(COLORS.text);
+};
+
+const addEmotionalTrendToPdf = (doc, dashboard) => {
+  addSectionTitle(doc, "Tendencia emocional");
+
+  if (dashboard.emotionalTrend?.length > 0) {
+    dashboard.emotionalTrend.forEach((item) => {
+      doc
+        .fontSize(11)
+        .font("Helvetica-Bold")
+        .fillColor(COLORS.text)
+        .text(`${item.mood_name}:`, {
+          continued: true,
+        });
+
+      doc
+        .font("Helvetica")
+        .fillColor(COLORS.muted)
+        .text(` semana actual ${item.current_week}, semana anterior ${item.previous_week}`);
+
+      doc.moveDown(0.4);
+    });
+  } else {
+    doc
+      .fontSize(12)
+      .font("Helvetica")
+      .fillColor(COLORS.muted)
+      .text("No hay tendencia emocional disponible.");
+  }
+};
+
+const addRecommendationsToPdf = (doc, dashboard) => {
+  addSectionTitle(doc, "Recomendaciones");
+
+  if (dashboard.recommendations?.length > 0) {
+    dashboard.recommendations.forEach((recommendation) => {
+      doc
+        .fontSize(12)
+        .font("Helvetica-Bold")
+        .fillColor(COLORS.purple)
+        .text(`- ${safeText(recommendation.title, "Recomendación")}`);
+
+      doc
+        .fontSize(10.5)
+        .font("Helvetica")
+        .fillColor(COLORS.muted)
+        .text(safeText(recommendation.message, ""));
+
+      doc.moveDown(0.8);
+    });
+  } else {
+    doc
+      .fontSize(12)
+      .font("Helvetica")
+      .fillColor(COLORS.muted)
+      .text("No hay recomendaciones disponibles.");
+  }
 };
 
 const buildReport = async (res, userId) => {
@@ -251,112 +384,23 @@ const buildReport = async (res, userId) => {
 
   const user = userResult.rows[0];
 
-  const doc = new PDFDocument({ margin: 50 });
+  const doc = new PDFDocument({
+    margin: 50,
+    size: "A4",
+  });
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", "attachment; filename=floflo-report.pdf");
 
   doc.pipe(res);
 
-  doc
-    .fontSize(24)
-    .font("Helvetica-Bold")
-    .fillColor("#111827")
-    .text("Reporte de Progreso FloFlo");
-
-  doc.moveDown();
-
-  doc
-    .fontSize(12)
-    .font("Helvetica")
-    .fillColor("#4B5563")
-    .text(`Fecha: ${new Date().toLocaleDateString("es-CL")}`);
-
-  doc.text(`Nombre: ${user?.firstName || ""} ${user?.lastName || ""}`);
-  doc.text(`Correo: ${user?.email || "Sin correo registrado"}`);
-
-  doc.moveDown(2);
-
-  doc
-    .fontSize(18)
-    .font("Helvetica-Bold")
-    .fillColor("#111827")
-    .text("Resumen General");
-
-  doc.moveDown();
-
-  doc.fontSize(12).font("Helvetica").fillColor("#4B5563");
-  doc.text(`Emociones: ${dashboard.emotions}`);
-  doc.text(`Rutinas: ${dashboard.routines}`);
-  doc.text(`Lugares: ${dashboard.places}`);
-  doc.text(`Contactos: ${dashboard.contacts}`);
-  doc.text(`Conversaciones: ${dashboard.conversations}`);
-  doc.text(`Logros: ${dashboard.achievements}`);
-
-  doc.moveDown(2);
-
+  addCover(doc, user);
+  addSummaryToPdf(doc, dashboard);
   addSensoryProfileToPdf(doc, sensoryProfile);
-
   addWeeklySupportPlanToPdf(doc, dashboard.weeklySupportPlan);
-
-  doc
-    .fontSize(18)
-    .font("Helvetica-Bold")
-    .fillColor("#111827")
-    .text("Tendencia emocional");
-
-  doc.moveDown();
-
-  if (dashboard.emotionalTrend?.length > 0) {
-    dashboard.emotionalTrend.forEach((item) => {
-      doc
-        .fontSize(12)
-        .font("Helvetica")
-        .fillColor("#4B5563")
-        .text(
-          `${item.mood_name}: semana actual ${item.current_week}, semana anterior ${item.previous_week}`,
-        );
-    });
-  } else {
-    doc
-      .fontSize(12)
-      .font("Helvetica")
-      .fillColor("#4B5563")
-      .text("No hay tendencia emocional disponible.");
-  }
-
-  doc.moveDown(2);
-
-  doc
-    .fontSize(18)
-    .font("Helvetica-Bold")
-    .fillColor("#111827")
-    .text("Recomendaciones");
-
-  doc.moveDown();
-
-  if (dashboard.recommendations?.length > 0) {
-    dashboard.recommendations.forEach((recommendation) => {
-      doc
-        .fontSize(12)
-        .font("Helvetica-Bold")
-        .fillColor("#4B367C")
-        .text(`- ${recommendation.title}`);
-
-      doc
-        .font("Helvetica")
-        .fillColor("#4B5563")
-        .text(recommendation.message);
-
-      doc.moveDown();
-    });
-  } else {
-    doc
-      .fontSize(12)
-      .font("Helvetica")
-      .fillColor("#4B5563")
-      .text("No hay recomendaciones disponibles.");
-  }
+  addEmotionalTrendToPdf(doc, dashboard);
+  addRecommendationsToPdf(doc, dashboard);
+  addFooter(doc);
 
   doc.end();
 };
