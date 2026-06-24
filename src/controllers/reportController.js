@@ -27,7 +27,7 @@ const getSensoryProfile = async (userId) => {
     FROM "FloFlo".sensory_profile
     WHERE user_id = $1
     `,
-    [userId]
+    [userId],
   );
 
   return result.rows[0] || null;
@@ -52,27 +52,35 @@ const hasSensoryProfileData = (profile) => {
 const addTextLine = (doc, label, value) => {
   if (!hasText(value)) return;
 
-  doc.fontSize(12).font("Helvetica-Bold").text(`${label}:`, {
+  doc.fontSize(12).font("Helvetica-Bold").fillColor("#111827").text(`${label}:`, {
     continued: true,
   });
 
-  doc.font("Helvetica").text(` ${value}`);
+  doc.font("Helvetica").fillColor("#4B5563").text(` ${value}`);
   doc.moveDown(0.5);
 };
 
 const addSensoryProfileToPdf = (doc, sensoryProfile) => {
-  doc.fontSize(18).font("Helvetica-Bold").text("Perfil sensorial");
+  doc.fontSize(18).font("Helvetica-Bold").fillColor("#111827").text("Perfil sensorial");
   doc.moveDown();
 
   if (!hasSensoryProfileData(sensoryProfile)) {
-    doc.fontSize(12).font("Helvetica").text(
-      "No hay perfil sensorial registrado todavía."
-    );
+    doc
+      .fontSize(12)
+      .font("Helvetica")
+      .fillColor("#4B5563")
+      .text("No hay perfil sensorial registrado todavía.");
+
     doc.moveDown(2);
     return;
   }
 
-  doc.fontSize(14).font("Helvetica-Bold").text("Sensibilidades principales");
+  doc
+    .fontSize(14)
+    .font("Helvetica-Bold")
+    .fillColor("#111827")
+    .text("Sensibilidades principales");
+
   doc.moveDown(0.5);
 
   addTextLine(doc, "Ruido", sensoryProfile.noise_sensitivity);
@@ -82,7 +90,12 @@ const addSensoryProfileToPdf = (doc, sensoryProfile) => {
 
   doc.moveDown();
 
-  doc.fontSize(14).font("Helvetica-Bold").text("Elementos y actividades que ayudan");
+  doc
+    .fontSize(14)
+    .font("Helvetica-Bold")
+    .fillColor("#111827")
+    .text("Elementos y actividades que ayudan");
+
   doc.moveDown(0.5);
 
   addTextLine(doc, "Objetos calmantes", sensoryProfile.calming_items);
@@ -90,19 +103,136 @@ const addSensoryProfileToPdf = (doc, sensoryProfile) => {
 
   doc.moveDown();
 
-  doc.fontSize(14).font("Helvetica-Bold").text("Señales de estrés");
+  doc
+    .fontSize(14)
+    .font("Helvetica-Bold")
+    .fillColor("#111827")
+    .text("Señales de estrés");
+
   doc.moveDown(0.5);
 
   addTextLine(doc, "Señales observables", sensoryProfile.stress_signals);
 
   doc.moveDown();
 
-  doc.fontSize(14).font("Helvetica-Bold").text("Estrategias de apoyo");
+  doc
+    .fontSize(14)
+    .font("Helvetica-Bold")
+    .fillColor("#111827")
+    .text("Estrategias de apoyo");
+
   doc.moveDown(0.5);
 
   addTextLine(doc, "Estrategias", sensoryProfile.support_strategies);
   addTextLine(doc, "Notas", sensoryProfile.notes);
 
+  doc.moveDown(2);
+};
+
+const addWeeklySupportPlanToPdf = (doc, weeklySupportPlan) => {
+  if (!weeklySupportPlan) return;
+
+  const days = Array.isArray(weeklySupportPlan.days)
+    ? weeklySupportPlan.days
+    : [];
+
+  const tips = Array.isArray(weeklySupportPlan.tips)
+    ? weeklySupportPlan.tips
+    : [];
+
+  doc
+    .fontSize(18)
+    .font("Helvetica-Bold")
+    .fillColor("#111827")
+    .text("Plan de apoyo semanal");
+
+  doc.moveDown(0.6);
+
+  if (weeklySupportPlan.title) {
+    doc
+      .fontSize(13)
+      .font("Helvetica-Bold")
+      .fillColor("#4B367C")
+      .text(weeklySupportPlan.title);
+
+    doc.moveDown(0.5);
+  }
+
+  if (weeklySupportPlan.focus) {
+    doc
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .fillColor("#111827")
+      .text("Enfoque de la semana:");
+
+    doc
+      .fontSize(11)
+      .font("Helvetica")
+      .fillColor("#4B5563")
+      .text(weeklySupportPlan.focus, {
+        align: "left",
+      });
+
+    doc.moveDown(0.8);
+  }
+
+  if (days.length > 0) {
+    doc
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .fillColor("#111827")
+      .text("Acciones sugeridas:");
+
+    doc.moveDown(0.4);
+
+    days.forEach((item) => {
+      doc
+        .fontSize(11)
+        .font("Helvetica-Bold")
+        .fillColor("#4B367C")
+        .text(`${item.day || "Día"} - ${item.title || "Actividad sugerida"}`);
+
+      if (item.action) {
+        doc
+          .fontSize(10)
+          .font("Helvetica")
+          .fillColor("#4B5563")
+          .text(`Acción: ${item.action}`);
+      }
+
+      if (item.reason) {
+        doc
+          .fontSize(10)
+          .font("Helvetica")
+          .fillColor("#6B7280")
+          .text(`Por qué ayuda: ${item.reason}`);
+      }
+
+      doc.moveDown(0.5);
+    });
+  }
+
+  if (tips.length > 0) {
+    doc.moveDown(0.3);
+
+    doc
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .fillColor("#111827")
+      .text("Consejos rápidos:");
+
+    doc.moveDown(0.3);
+
+    tips.forEach((tip) => {
+      doc
+        .fontSize(10)
+        .font("Helvetica")
+        .fillColor("#4B5563")
+        .text(`- ${tip}`);
+    });
+  }
+
+  doc.fillColor("#000000");
   doc.moveDown(2);
 };
 
@@ -116,7 +246,7 @@ const buildReport = async (res, userId) => {
     FROM "FloFlo".user
     WHERE id = $1
     `,
-    [userId]
+    [userId],
   );
 
   const user = userResult.rows[0];
@@ -124,26 +254,38 @@ const buildReport = async (res, userId) => {
   const doc = new PDFDocument({ margin: 50 });
 
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader(
-    "Content-Disposition",
-    "attachment; filename=floflo-report.pdf"
-  );
+  res.setHeader("Content-Disposition", "attachment; filename=floflo-report.pdf");
 
   doc.pipe(res);
 
-  doc.fontSize(24).font("Helvetica-Bold").text("Reporte de Progreso FloFlo");
+  doc
+    .fontSize(24)
+    .font("Helvetica-Bold")
+    .fillColor("#111827")
+    .text("Reporte de Progreso FloFlo");
+
   doc.moveDown();
 
-  doc.fontSize(12).font("Helvetica").text(`Fecha: ${new Date().toLocaleDateString("es-CL")}`);
+  doc
+    .fontSize(12)
+    .font("Helvetica")
+    .fillColor("#4B5563")
+    .text(`Fecha: ${new Date().toLocaleDateString("es-CL")}`);
+
   doc.text(`Nombre: ${user?.firstName || ""} ${user?.lastName || ""}`);
   doc.text(`Correo: ${user?.email || "Sin correo registrado"}`);
 
   doc.moveDown(2);
 
-  doc.fontSize(18).font("Helvetica-Bold").text("Resumen General");
+  doc
+    .fontSize(18)
+    .font("Helvetica-Bold")
+    .fillColor("#111827")
+    .text("Resumen General");
+
   doc.moveDown();
 
-  doc.fontSize(12).font("Helvetica");
+  doc.fontSize(12).font("Helvetica").fillColor("#4B5563");
   doc.text(`Emociones: ${dashboard.emotions}`);
   doc.text(`Rutinas: ${dashboard.routines}`);
   doc.text(`Lugares: ${dashboard.places}`);
@@ -155,32 +297,65 @@ const buildReport = async (res, userId) => {
 
   addSensoryProfileToPdf(doc, sensoryProfile);
 
-  doc.fontSize(18).font("Helvetica-Bold").text("Tendencia emocional");
+  addWeeklySupportPlanToPdf(doc, dashboard.weeklySupportPlan);
+
+  doc
+    .fontSize(18)
+    .font("Helvetica-Bold")
+    .fillColor("#111827")
+    .text("Tendencia emocional");
+
   doc.moveDown();
 
   if (dashboard.emotionalTrend?.length > 0) {
     dashboard.emotionalTrend.forEach((item) => {
-      doc.fontSize(12).font("Helvetica").text(
-        `${item.mood_name}: semana actual ${item.current_week}, semana anterior ${item.previous_week}`
-      );
+      doc
+        .fontSize(12)
+        .font("Helvetica")
+        .fillColor("#4B5563")
+        .text(
+          `${item.mood_name}: semana actual ${item.current_week}, semana anterior ${item.previous_week}`,
+        );
     });
   } else {
-    doc.fontSize(12).font("Helvetica").text("No hay tendencia emocional disponible.");
+    doc
+      .fontSize(12)
+      .font("Helvetica")
+      .fillColor("#4B5563")
+      .text("No hay tendencia emocional disponible.");
   }
 
   doc.moveDown(2);
 
-  doc.fontSize(18).font("Helvetica-Bold").text("Recomendaciones");
+  doc
+    .fontSize(18)
+    .font("Helvetica-Bold")
+    .fillColor("#111827")
+    .text("Recomendaciones");
+
   doc.moveDown();
 
   if (dashboard.recommendations?.length > 0) {
     dashboard.recommendations.forEach((recommendation) => {
-      doc.fontSize(12).font("Helvetica-Bold").text(`• ${recommendation.title}`);
-      doc.font("Helvetica").text(recommendation.message);
+      doc
+        .fontSize(12)
+        .font("Helvetica-Bold")
+        .fillColor("#4B367C")
+        .text(`- ${recommendation.title}`);
+
+      doc
+        .font("Helvetica")
+        .fillColor("#4B5563")
+        .text(recommendation.message);
+
       doc.moveDown();
     });
   } else {
-    doc.fontSize(12).font("Helvetica").text("No hay recomendaciones disponibles.");
+    doc
+      .fontSize(12)
+      .font("Helvetica")
+      .fillColor("#4B5563")
+      .text("No hay recomendaciones disponibles.");
   }
 
   doc.end();
@@ -193,9 +368,12 @@ const generateMyReport = async (req, res) => {
     await buildReport(res, userId);
   } catch (error) {
     console.error("Error generando mi reporte:", error);
-    res.status(500).json({
-      message: "Error al generar reporte PDF",
-    });
+
+    if (!res.headersSent) {
+      return res.status(500).json({
+        message: "Error al generar reporte PDF",
+      });
+    }
   }
 };
 
@@ -224,7 +402,7 @@ const generateChildReport = async (req, res) => {
       AND child_id = $2
       LIMIT 1
       `,
-      [parentId, Number(childId)]
+      [parentId, Number(childId)],
     );
 
     if (relation.rows.length === 0) {
@@ -236,9 +414,12 @@ const generateChildReport = async (req, res) => {
     await buildReport(res, Number(childId));
   } catch (error) {
     console.error("Error generando reporte del niño:", error);
-    res.status(500).json({
-      message: "Error al generar reporte PDF del niño",
-    });
+
+    if (!res.headersSent) {
+      return res.status(500).json({
+        message: "Error al generar reporte PDF del niño",
+      });
+    }
   }
 };
 
