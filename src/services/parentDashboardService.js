@@ -180,10 +180,116 @@ const buildSensoryAlerts = (sensoryProfile, dashboardData) => {
   return alerts;
 };
 
+const buildWeeklySupportPlan = (dashboardData, sensoryProfile) => {
+  const childName = dashboardData.childName || "el niño/la niña";
+
+  const latestMoodName = dashboardData.latestMood?.mood_name;
+  const difficultMoods = ["Ansioso", "Asustado", "Enojado", "Triste"];
+
+  const hasSensoryData =
+    sensoryProfile &&
+    [
+      sensoryProfile.noise_sensitivity,
+      sensoryProfile.light_sensitivity,
+      sensoryProfile.texture_sensitivity,
+      sensoryProfile.crowd_sensitivity,
+      sensoryProfile.calming_items,
+      sensoryProfile.calming_activities,
+      sensoryProfile.stress_signals,
+      sensoryProfile.support_strategies,
+      sensoryProfile.notes,
+    ].some(hasText);
+
+  const calmingSupport =
+    cleanText(sensoryProfile?.calming_items) ||
+    cleanText(sensoryProfile?.calming_activities) ||
+    "un objeto o actividad que le ayude a calmarse";
+
+  const supportStrategy =
+    cleanText(sensoryProfile?.support_strategies) ||
+    "hablar con calma, anticipar cambios y ofrecer una pausa";
+
+  let focus =
+    "Reforzar la comunicación, las rutinas y los avances pequeños durante la semana.";
+
+  if (difficultMoods.includes(latestMoodName) && hasSensoryData) {
+    focus = `Acompañar la emoción reciente "${latestMoodName}" y observar posibles señales de sobrecarga sensorial.`;
+  } else if (difficultMoods.includes(latestMoodName)) {
+    focus = `Acompañar la emoción reciente "${latestMoodName}" con calma y sin presión.`;
+  } else if (dashboardData.routines === 0) {
+    focus =
+      "Crear o reforzar una rutina simple para dar más anticipación y seguridad.";
+  } else if (dashboardData.conversations === 0) {
+    focus =
+      "Comenzar con conversaciones simples para practicar habilidades sociales.";
+  } else if (hasSensoryData) {
+    focus =
+      "Usar el perfil sensorial para anticipar apoyos durante rutinas, lugares y conversaciones.";
+  }
+
+  return {
+    title: `Plan de apoyo semanal para ${childName}`,
+    focus,
+    days: [
+      {
+        day: "Lunes",
+        icon: "😊",
+        title: "Revisar cómo se sintió",
+        action: latestMoodName
+          ? `Conversar brevemente sobre la emoción "${latestMoodName}" y preguntar qué pudo haberla provocado.`
+          : "Preguntar con calma qué emoción apareció más durante el día.",
+        reason: "Ayuda a reconocer patrones emocionales sin presionar.",
+      },
+      {
+        day: "Martes",
+        icon: "💬",
+        title: "Practicar una conversación",
+        action: dashboardData.latestContactConversation?.title
+          ? `Practicar la conversación "${dashboardData.latestContactConversation.title}" con una respuesta breve y clara.`
+          : "Elegir una conversación simple y practicar una respuesta corta.",
+        reason: "Refuerza habilidades sociales en un contexto seguro.",
+      },
+      {
+        day: "Miércoles",
+        icon: "🧩",
+        title: "Preparar apoyos sensoriales",
+        action: hasSensoryData
+          ? `Tener disponible ${calmingSupport} antes de una actividad que pueda ser exigente.`
+          : "Observar si hay estímulos como ruido, luz o multitudes que puedan incomodar.",
+        reason: "Anticipar apoyos puede facilitar la regulación.",
+      },
+      {
+        day: "Jueves",
+        icon: "🕒",
+        title: "Reforzar una rutina",
+        action: dashboardData.latestRoutine?.name
+          ? `Repasar la rutina "${dashboardData.latestRoutine.name}" paso a paso.`
+          : "Crear o repasar una rutina pequeña, con pocos pasos y lenguaje claro.",
+        reason: "Las rutinas ayudan a anticipar lo que viene.",
+      },
+      {
+        day: "Viernes",
+        icon: "⭐",
+        title: "Cerrar la semana con un logro",
+        action:
+          dashboardData.achievements > 0
+            ? "Elegir un logro desbloqueado y felicitar el esfuerzo realizado."
+            : "Reconocer un avance pequeño de la semana, aunque no haya logro desbloqueado.",
+        reason: "Celebrar avances pequeños fortalece la motivación.",
+      },
+    ],
+    tips: [
+      "Usar frases cortas y claras.",
+      "Anticipar cambios importantes antes de que ocurran.",
+      `Estrategia sugerida: ${supportStrategy}.`,
+    ],
+  };
+};
+
 const getParentDashboard = async (userId) => {
   const userIdNumber = validateUserId(userId);
 
-    const [
+  const [
     emotions,
     routines,
     places,
@@ -570,6 +676,12 @@ const getParentDashboard = async (userId) => {
   );
 
   const sensoryAlerts = buildSensoryAlerts(sensoryProfileData, dashboardData);
+
+  const weeklySupportPlan = buildWeeklySupportPlan(
+    dashboardData,
+    sensoryProfileData,
+  );
+
   const alerts = [];
   alerts.push(...sensoryAlerts);
 
@@ -657,6 +769,7 @@ const getParentDashboard = async (userId) => {
     emotionalTrend: emotionalTrend.rows,
     alerts,
     activityCalendar: activityCalendar.rows,
+    weeklySupportPlan,
     recommendations,
   };
 };
