@@ -37,7 +37,8 @@ const getSensoryProfile = async (userId) => {
       calming_activities,
       stress_signals,
       support_strategies,
-      notes
+      notes,
+      updated_at
     FROM "FloFlo".sensory_profile
     WHERE user_id = $1
     `,
@@ -45,6 +46,34 @@ const getSensoryProfile = async (userId) => {
   );
 
   return result.rows[0] || null;
+};
+
+const getSensoryProfileHistory = async (userId) => {
+  const result = await pool.query(
+    `
+    SELECT
+      id,
+      user_id,
+      created_by,
+      noise_sensitivity,
+      light_sensitivity,
+      texture_sensitivity,
+      crowd_sensitivity,
+      calming_items,
+      calming_activities,
+      stress_signals,
+      support_strategies,
+      notes,
+      created_at
+    FROM "FloFlo".sensory_profile_history
+    WHERE user_id = $1
+    ORDER BY created_at DESC
+    LIMIT 5
+    `,
+    [userId],
+  );
+
+  return result.rows;
 };
 
 const hasSensoryProfileData = (profile) => {
@@ -81,11 +110,7 @@ const addFooter = (doc) => {
 const addSectionTitle = (doc, title) => {
   doc.moveDown(1);
 
-  doc
-    .fontSize(18)
-    .font("Helvetica-Bold")
-    .fillColor(COLORS.purple)
-    .text(title);
+  doc.fontSize(18).font("Helvetica-Bold").fillColor(COLORS.purple).text(title);
 
   doc
     .moveTo(50, doc.y + 6)
@@ -114,9 +139,7 @@ const addTextLine = (doc, label, value) => {
 };
 
 const addCover = (doc, user) => {
-  doc
-    .rect(0, 0, doc.page.width, 130)
-    .fill(COLORS.purpleLight);
+  doc.rect(0, 0, doc.page.width, 130).fill(COLORS.purpleLight);
 
   doc
     .fontSize(28)
@@ -173,10 +196,96 @@ const addSummaryToPdf = (doc, dashboard) => {
     doc.moveDown(0.35);
   });
 };
+const formatDate = (date) => {
+  if (!date) return null;
 
-const addSensoryProfileToPdf = (doc, sensoryProfile) => {
+  return new Date(date).toLocaleString("es-CL", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+};
+
+const sensoryFields = [
+  {
+    key: "noise_sensitivity",
+    label: "Sensibilidad al ruido",
+  },
+  {
+    key: "light_sensitivity",
+    label: "Sensibilidad a la luz",
+  },
+  {
+    key: "texture_sensitivity",
+    label: "Sensibilidad a texturas",
+  },
+  {
+    key: "crowd_sensitivity",
+    label: "Sensibilidad a multitudes",
+  },
+  {
+    key: "calming_items",
+    label: "Objetos que ayudan a calmar",
+  },
+  {
+    key: "calming_activities",
+    label: "Actividades que ayudan",
+  },
+  {
+    key: "stress_signals",
+    label: "Señales de sobrecarga",
+  },
+  {
+    key: "support_strategies",
+    label: "Estrategias que funcionan",
+  },
+  {
+    key: "notes",
+    label: "Notas generales",
+  },
+];
+
+const buildSensoryChanges = (currentProfile, previousProfile) => {
+  if (!currentProfile || !previousProfile) return [];
+
+  return sensoryFields
+    .map((field) => {
+      const currentValue = currentProfile[field.key]?.trim() || "";
+      const previousValue = previousProfile[field.key]?.trim() || "";
+
+      if (currentValue === previousValue) return null;
+
+      return {
+        label: field.label,
+        before: previousValue || "Sin información registrada",
+        after: currentValue || "Sin información registrada",
+      };
+    })
+    .filter(Boolean);
+};
+
+const addSensoryProfileToPdf = (doc, sensoryProfile, sensoryHistory = []) => {
   addSectionTitle(doc, "Perfil sensorial");
+  const lastUpdatedAt =
+    sensoryProfile?.updated_at || sensoryHistory?.[0]?.created_at || null;
 
+  const formattedLastUpdatedAt = formatDate(lastUpdatedAt);
+
+  if (formattedLastUpdatedAt) {
+    doc
+      .fontSize(11)
+      .font("Helvetica-Bold")
+      .fillColor(COLORS.text)
+      .text("Ultima actualizacion:", {
+        continued: true,
+      });
+
+    doc
+      .font("Helvetica")
+      .fillColor(COLORS.purple)
+      .text(` ${formattedLastUpdatedAt}`);
+
+    doc.moveDown(0.8);
+  }
   if (!hasSensoryProfileData(sensoryProfile)) {
     doc
       .fontSize(12)
@@ -188,7 +297,11 @@ const addSensoryProfileToPdf = (doc, sensoryProfile) => {
     return;
   }
 
-  doc.fontSize(13).font("Helvetica-Bold").fillColor(COLORS.text).text("Sensibilidades principales");
+  doc
+    .fontSize(13)
+    .font("Helvetica-Bold")
+    .fillColor(COLORS.text)
+    .text("Sensibilidades principales");
   doc.moveDown(0.5);
 
   addTextLine(doc, "Ruido", sensoryProfile.noise_sensitivity);
@@ -198,7 +311,11 @@ const addSensoryProfileToPdf = (doc, sensoryProfile) => {
 
   doc.moveDown(0.8);
 
-  doc.fontSize(13).font("Helvetica-Bold").fillColor(COLORS.text).text("Elementos y actividades que ayudan");
+  doc
+    .fontSize(13)
+    .font("Helvetica-Bold")
+    .fillColor(COLORS.text)
+    .text("Elementos y actividades que ayudan");
   doc.moveDown(0.5);
 
   addTextLine(doc, "Objetos calmantes", sensoryProfile.calming_items);
@@ -206,12 +323,72 @@ const addSensoryProfileToPdf = (doc, sensoryProfile) => {
 
   doc.moveDown(0.8);
 
-  doc.fontSize(13).font("Helvetica-Bold").fillColor(COLORS.text).text("Señales y estrategias");
+  doc
+    .fontSize(13)
+    .font("Helvetica-Bold")
+    .fillColor(COLORS.text)
+    .text("Señales y estrategias");
   doc.moveDown(0.5);
 
   addTextLine(doc, "Señales observables", sensoryProfile.stress_signals);
   addTextLine(doc, "Estrategias", sensoryProfile.support_strategies);
   addTextLine(doc, "Notas", sensoryProfile.notes);
+  const previousProfile = sensoryHistory?.[1] || null;
+  const changes = buildSensoryChanges(sensoryProfile, previousProfile);
+
+  doc.moveDown(0.8);
+
+  doc
+    .fontSize(13)
+    .font("Helvetica-Bold")
+    .fillColor(COLORS.text)
+    .text("Cambios recientes respecto a la version anterior");
+
+  doc.moveDown(0.5);
+
+  if (!previousProfile) {
+    doc
+      .fontSize(11)
+      .font("Helvetica")
+      .fillColor(COLORS.muted)
+      .text("Todavia se necesita una version anterior para comparar cambios.");
+  } else if (changes.length === 0) {
+    doc
+      .fontSize(11)
+      .font("Helvetica")
+      .fillColor(COLORS.muted)
+      .text("No se detectaron cambios respecto a la version anterior.");
+  } else {
+    changes.forEach((change) => {
+      doc
+        .fontSize(11)
+        .font("Helvetica-Bold")
+        .fillColor(COLORS.purple)
+        .text(change.label);
+
+      doc
+        .fontSize(10)
+        .font("Helvetica-Bold")
+        .fillColor(COLORS.text)
+        .text("Antes:", {
+          continued: true,
+        });
+
+      doc.font("Helvetica").fillColor(COLORS.muted).text(` ${change.before}`);
+
+      doc
+        .fontSize(10)
+        .font("Helvetica-Bold")
+        .fillColor(COLORS.text)
+        .text("Ahora:", {
+          continued: true,
+        });
+
+      doc.font("Helvetica").fillColor(COLORS.muted).text(` ${change.after}`);
+
+      doc.moveDown(0.6);
+    });
+  }
 };
 
 const addWeeklySupportPlanToPdf = (doc, weeklySupportPlan) => {
@@ -267,7 +444,9 @@ const addWeeklySupportPlanToPdf = (doc, weeklySupportPlan) => {
         .fontSize(11)
         .font("Helvetica-Bold")
         .fillColor(COLORS.purple)
-        .text(`${safeText(item.day, "Día")} - ${safeText(item.title, "Actividad sugerida")}`);
+        .text(
+          `${safeText(item.day, "Día")} - ${safeText(item.title, "Actividad sugerida")}`,
+        );
 
       if (item.action) {
         doc
@@ -328,7 +507,9 @@ const addEmotionalTrendToPdf = (doc, dashboard) => {
       doc
         .font("Helvetica")
         .fillColor(COLORS.muted)
-        .text(` semana actual ${item.current_week}, semana anterior ${item.previous_week}`);
+        .text(
+          ` semana actual ${item.current_week}, semana anterior ${item.previous_week}`,
+        );
 
       doc.moveDown(0.4);
     });
@@ -372,6 +553,7 @@ const addRecommendationsToPdf = (doc, dashboard) => {
 const buildReport = async (res, userId) => {
   const dashboard = await parentDashboardService.getParentDashboard(userId);
   const sensoryProfile = await getSensoryProfile(userId);
+  const sensoryHistory = await getSensoryProfileHistory(userId);
 
   const userResult = await pool.query(
     `
@@ -390,13 +572,16 @@ const buildReport = async (res, userId) => {
   });
 
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", "attachment; filename=floflo-report.pdf");
+  res.setHeader(
+    "Content-Disposition",
+    "attachment; filename=floflo-report.pdf",
+  );
 
   doc.pipe(res);
 
   addCover(doc, user);
   addSummaryToPdf(doc, dashboard);
-  addSensoryProfileToPdf(doc, sensoryProfile);
+  addSensoryProfileToPdf(doc, sensoryProfile, sensoryHistory);
   addWeeklySupportPlanToPdf(doc, dashboard.weeklySupportPlan);
   addEmotionalTrendToPdf(doc, dashboard);
   addRecommendationsToPdf(doc, dashboard);
