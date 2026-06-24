@@ -491,6 +491,154 @@ const addWeeklySupportPlanToPdf = (doc, weeklySupportPlan) => {
   doc.fillColor(COLORS.text);
 };
 
+const parseWeeklyPlan = (plan) => {
+  if (!plan) return null;
+
+  if (typeof plan === "string") {
+    try {
+      return JSON.parse(plan);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  return plan;
+};
+
+const addWeeklySupportPlanHistoryToPdf = (doc, weeklyPlanHistory = []) => {
+  if (!Array.isArray(weeklyPlanHistory) || weeklyPlanHistory.length === 0) {
+    return;
+  }
+
+  addSectionTitle(doc, "Historial de planes semanales");
+
+  doc
+    .fontSize(11)
+    .font("Helvetica")
+    .fillColor(COLORS.muted)
+    .text(
+      "Estos son los planes semanales guardados anteriormente para acompañar el progreso del niño.",
+    );
+
+  doc.moveDown(0.8);
+
+  weeklyPlanHistory.slice(0, 4).forEach((record, index) => {
+    const plan = parseWeeklyPlan(record.plan);
+
+    const weekStart = record.week_start
+      ? new Date(record.week_start).toLocaleDateString("es-CL", {
+          dateStyle: "medium",
+        })
+      : "Semana no disponible";
+
+    const updatedAt = record.updated_at
+      ? new Date(record.updated_at).toLocaleString("es-CL", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
+      : null;
+
+    doc
+      .fontSize(13)
+      .font("Helvetica-Bold")
+      .fillColor(COLORS.purple)
+      .text(`Semana del ${weekStart}`);
+
+    if (index === 0) {
+      doc
+        .fontSize(9)
+        .font("Helvetica-Bold")
+        .fillColor(COLORS.green || "#047857")
+        .text("Plan más reciente");
+    }
+
+    if (updatedAt) {
+      doc
+        .fontSize(10)
+        .font("Helvetica")
+        .fillColor(COLORS.muted)
+        .text(`Actualizado el ${updatedAt}`);
+    }
+
+    doc.moveDown(0.3);
+
+    const focus = record.focus || plan?.focus;
+
+    if (focus) {
+      doc
+        .fontSize(10)
+        .font("Helvetica-Bold")
+        .fillColor(COLORS.text)
+        .text("Enfoque:", {
+          continued: true,
+        });
+
+      doc.font("Helvetica").fillColor(COLORS.muted).text(` ${focus}`);
+    }
+
+    const days = Array.isArray(plan?.days) ? plan.days : [];
+
+    if (days.length > 0) {
+      doc.moveDown(0.3);
+
+      doc
+        .fontSize(10)
+        .font("Helvetica-Bold")
+        .fillColor(COLORS.text)
+        .text("Acciones sugeridas:");
+
+      days.forEach((day) => {
+        doc
+          .fontSize(9.5)
+          .font("Helvetica-Bold")
+          .fillColor(COLORS.purple)
+          .text(`${day.day || "Día"}:`, {
+            continued: true,
+          });
+
+        doc
+          .font("Helvetica")
+          .fillColor(COLORS.muted)
+          .text(` ${day.title || "Actividad sugerida"}`);
+
+        if (day.action) {
+          doc
+            .fontSize(9)
+            .font("Helvetica")
+            .fillColor(COLORS.muted)
+            .text(`Acción: ${day.action}`);
+        }
+
+        doc.moveDown(0.25);
+      });
+    }
+
+    const tips = Array.isArray(plan?.tips) ? plan.tips : [];
+
+    if (tips.length > 0) {
+      doc.moveDown(0.2);
+
+      doc
+        .fontSize(10)
+        .font("Helvetica-Bold")
+        .fillColor(COLORS.text)
+        .text("Consejos rápidos:");
+
+      tips.forEach((tip) => {
+        doc
+          .fontSize(9)
+          .font("Helvetica")
+          .fillColor(COLORS.muted)
+          .text(`- ${tip}`);
+      });
+    }
+
+    doc.moveDown(1);
+  });
+
+  doc.fillColor(COLORS.text);
+};
+
 const addEmotionalTrendToPdf = (doc, dashboard) => {
   addSectionTitle(doc, "Tendencia emocional");
 
@@ -552,6 +700,10 @@ const addRecommendationsToPdf = (doc, dashboard) => {
 
 const buildReport = async (res, userId) => {
   const dashboard = await parentDashboardService.getParentDashboard(userId);
+
+  const weeklyPlanHistory =
+    await parentDashboardService.getWeeklySupportPlanHistory(userId);
+
   const sensoryProfile = await getSensoryProfile(userId);
   const sensoryHistory = await getSensoryProfileHistory(userId);
 
@@ -583,6 +735,7 @@ const buildReport = async (res, userId) => {
   addSummaryToPdf(doc, dashboard);
   addSensoryProfileToPdf(doc, sensoryProfile, sensoryHistory);
   addWeeklySupportPlanToPdf(doc, dashboard.weeklySupportPlan);
+  addWeeklySupportPlanHistoryToPdf(doc, weeklyPlanHistory);
   addEmotionalTrendToPdf(doc, dashboard);
   addRecommendationsToPdf(doc, dashboard);
   addFooter(doc);
