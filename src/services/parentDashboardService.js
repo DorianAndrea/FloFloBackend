@@ -286,6 +286,73 @@ const buildWeeklySupportPlan = (dashboardData, sensoryProfile) => {
   };
 };
 
+const saveWeeklySupportPlanHistory = async (childId, weeklySupportPlan) => {
+  if (!weeklySupportPlan) return null;
+
+  const result = await pool.query(
+    `
+    INSERT INTO "FloFlo".weekly_support_plan_history (
+      child_id,
+      week_start,
+      title,
+      focus,
+      plan,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      $1,
+      DATE_TRUNC('week', NOW())::date,
+      $2,
+      $3,
+      $4::jsonb,
+      NOW(),
+      NOW()
+    )
+    ON CONFLICT (child_id, week_start)
+    DO UPDATE SET
+      title = EXCLUDED.title,
+      focus = EXCLUDED.focus,
+      plan = EXCLUDED.plan,
+      updated_at = NOW()
+    RETURNING *
+    `,
+    [
+      childId,
+      weeklySupportPlan.title || null,
+      weeklySupportPlan.focus || null,
+      JSON.stringify(weeklySupportPlan),
+    ],
+  );
+
+  return result.rows[0] || null;
+};
+
+const getWeeklySupportPlanHistory = async (userId) => {
+  const userIdNumber = validateUserId(userId);
+
+  const result = await pool.query(
+    `
+    SELECT
+      id,
+      child_id,
+      week_start,
+      title,
+      focus,
+      plan,
+      created_at,
+      updated_at
+    FROM "FloFlo".weekly_support_plan_history
+    WHERE child_id = $1
+    ORDER BY week_start DESC
+    LIMIT 12
+    `,
+    [userIdNumber],
+  );
+
+  return result.rows;
+};
+
 const getParentDashboard = async (userId) => {
   const userIdNumber = validateUserId(userId);
 
@@ -682,6 +749,16 @@ const getParentDashboard = async (userId) => {
     sensoryProfileData,
   );
 
+  let weeklySupportPlanRecord = null;
+
+  try {
+    weeklySupportPlanRecord = await saveWeeklySupportPlanHistory(
+      userIdNumber,
+      weeklySupportPlan,
+    );
+  } catch (error) {
+    console.error("Error guardando historial del plan semanal:", error.message);
+  }
   const alerts = [];
   alerts.push(...sensoryAlerts);
 
@@ -770,10 +847,12 @@ const getParentDashboard = async (userId) => {
     alerts,
     activityCalendar: activityCalendar.rows,
     weeklySupportPlan,
+    weeklySupportPlanRecord,
     recommendations,
   };
 };
 
 module.exports = {
   getParentDashboard,
+  getWeeklySupportPlanHistory,
 };
