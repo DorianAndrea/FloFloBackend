@@ -25,50 +25,184 @@ const safeText = (value, fallback = "Sin información registrada") => {
   return hasText(value) ? String(value).trim() : fallback;
 };
 
-const splitTerms = (text) => {
+const normalizeText = (value) => {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+};
+
+const ignoredTerms = new Set([
+  "clara",
+  "claras",
+  "breve",
+  "breves",
+  "importante",
+  "importantes",
+  "actividad",
+  "actividades",
+  "accion",
+  "acciones",
+  "sugerida",
+  "sugeridas",
+  "estrategia",
+  "estrategias",
+  "felix",
+]);
+
+const supportPatterns = [
+  {
+    label: "Conversar sobre la emoción",
+    keywords: ["emocion", "emocional", "conversar", "preguntar que pudo"],
+  },
+  {
+    label: "Practicar conversaciones sociales",
+    keywords: ["practicar la conversacion", "conversacion social", "que decir"],
+  },
+  {
+    label: "Guiar rutina paso a paso",
+    keywords: ["rutina", "paso a paso", "repasar"],
+  },
+  {
+    label: "Anticipar antes de una actividad",
+    keywords: ["anticipar", "antes de una actividad", "preparar"],
+  },
+  {
+    label: "Ofrecer pausa o espacio tranquilo",
+    keywords: ["pausa", "descanso", "lugar tranquilo", "espacio tranquilo"],
+  },
+  {
+    label: "Usar objeto calmante",
+    keywords: ["objeto calmante", "manta", "peluche", "audifono", "audifonos"],
+  },
+  {
+    label: "Reducir estímulos sensoriales",
+    keywords: ["ruido", "luz", "textura", "multitud", "estimulo"],
+  },
+  {
+    label: "Realizar actividad calmante",
+    keywords: ["dibujar", "pintar", "colorear", "respirar", "musica"],
+  },
+  {
+    label: "Reforzar avances y logros",
+    keywords: ["logro", "logros", "felicitar", "esfuerzo", "avance", "avances"],
+  },
+];
+
+const strategyPatterns = [
+  {
+    label: "Usar frases cortas y claras",
+    keywords: ["frases cortas", "frase corta", "instrucciones simples"],
+  },
+  {
+    label: "Hablar con calma",
+    keywords: ["hablarle", "hablar con calma", "voz calmada", "tono calmo"],
+  },
+  {
+    label: "Anticipar cambios importantes",
+    keywords: ["anticipar cambios", "anticipar", "avisar antes", "preparar"],
+  },
+  {
+    label: "Ofrecer pausa",
+    keywords: ["pausa", "descanso", "detener", "espacio tranquilo"],
+  },
+  {
+    label: "Validar y nombrar la emoción",
+    keywords: ["validar", "nombrar la emocion", "reconocer la emocion"],
+  },
+  {
+    label: "Guiar paso a paso",
+    keywords: ["paso a paso", "guiar", "acompanar", "acompañar"],
+  },
+  {
+    label: "Reforzar avances pequeños",
+    keywords: ["reforzar", "felicitar", "logro", "avance"],
+  },
+  {
+    label: "Mantener rutina predecible",
+    keywords: ["rutina", "predecible", "estructura"],
+  },
+];
+
+const splitCandidatePhrases = (text) => {
   if (!text || typeof text !== "string") return [];
 
-  const ignoredWords = [
-    "clara",
-    "claras",
-    "breve",
-    "breves",
-    "importante",
-    "importantes",
-    "actividad",
-    "actividades",
-  ];
-
   return text
-    .split(/,|;|\n|\.| y /i)
+    .replace(/[“”"]/g, "")
+    .split(/,|;|\n|\.|\s+y\s+/gi)
     .map((item) => item.trim())
     .filter((item) => item.length >= 4)
-    .filter((item) => !ignoredWords.includes(item.toLowerCase()))
     .filter((item) => item.length <= 90)
+    .filter((item) => !ignoredTerms.has(normalizeText(item)))
     .map((item) => item.charAt(0).toUpperCase() + item.slice(1));
+};
+
+const extractCategorizedTerms = (text, patterns, allowFallback = true) => {
+  const normalizedText = normalizeText(text);
+
+  if (!normalizedText || ignoredTerms.has(normalizedText)) {
+    return [];
+  }
+
+  const matchedLabels = patterns
+    .filter((pattern) =>
+      pattern.keywords.some((keyword) =>
+        normalizedText.includes(normalizeText(keyword)),
+      ),
+    )
+    .map((pattern) => pattern.label);
+
+  const uniqueLabels = [...new Set(matchedLabels)];
+
+  if (uniqueLabels.length > 0) {
+    return uniqueLabels;
+  }
+
+  if (!allowFallback) {
+    return [];
+  }
+
+  return splitCandidatePhrases(text).slice(0, 2);
+};
+
+const extractSupportTerms = (text) => {
+  return extractCategorizedTerms(text, supportPatterns, true);
+};
+
+const extractStrategyTerms = (text) => {
+  return extractCategorizedTerms(text, strategyPatterns, false);
 };
 
 const countRepeatedTerms = (terms) => {
   const map = new Map();
 
   terms.forEach((term) => {
-    const key = term.toLowerCase();
-    const current = map.get(key);
+    const cleanTerm = String(term || "").trim();
+
+    if (!cleanTerm) return;
+
+    const normalizedTerm = normalizeText(cleanTerm);
+
+    if (ignoredTerms.has(normalizedTerm)) return;
+
+    const current = map.get(normalizedTerm);
 
     if (current) {
-      map.set(key, {
+      map.set(normalizedTerm, {
         label: current.label,
         count: current.count + 1,
       });
     } else {
-      map.set(key, {
-        label: term,
+      map.set(normalizedTerm, {
+        label: cleanTerm,
         count: 1,
       });
     }
   });
 
   return Array.from(map.values())
+    .filter((item) => item.label.length >= 4)
     .sort((a, b) => b.count - a.count)
     .slice(0, 6);
 };
@@ -244,6 +378,7 @@ const addSummaryToPdf = (doc, dashboard) => {
     doc.moveDown(0.35);
   });
 };
+
 const formatDate = (date) => {
   if (!date) return null;
 
@@ -313,6 +448,7 @@ const buildSensoryChanges = (currentProfile, previousProfile) => {
 
 const addSensoryProfileToPdf = (doc, sensoryProfile, sensoryHistory = []) => {
   addSectionTitle(doc, "Perfil sensorial");
+
   const lastUpdatedAt =
     sensoryProfile?.updated_at || sensoryHistory?.[0]?.created_at || null;
 
@@ -323,7 +459,7 @@ const addSensoryProfileToPdf = (doc, sensoryProfile, sensoryHistory = []) => {
       .fontSize(11)
       .font("Helvetica-Bold")
       .fillColor(COLORS.text)
-      .text("Ultima actualizacion:", {
+      .text("Última actualización:", {
         continued: true,
       });
 
@@ -334,6 +470,7 @@ const addSensoryProfileToPdf = (doc, sensoryProfile, sensoryHistory = []) => {
 
     doc.moveDown(0.8);
   }
+
   if (!hasSensoryProfileData(sensoryProfile)) {
     doc
       .fontSize(12)
@@ -350,6 +487,7 @@ const addSensoryProfileToPdf = (doc, sensoryProfile, sensoryHistory = []) => {
     .font("Helvetica-Bold")
     .fillColor(COLORS.text)
     .text("Sensibilidades principales");
+
   doc.moveDown(0.5);
 
   addTextLine(doc, "Ruido", sensoryProfile.noise_sensitivity);
@@ -364,6 +502,7 @@ const addSensoryProfileToPdf = (doc, sensoryProfile, sensoryHistory = []) => {
     .font("Helvetica-Bold")
     .fillColor(COLORS.text)
     .text("Elementos y actividades que ayudan");
+
   doc.moveDown(0.5);
 
   addTextLine(doc, "Objetos calmantes", sensoryProfile.calming_items);
@@ -376,11 +515,13 @@ const addSensoryProfileToPdf = (doc, sensoryProfile, sensoryHistory = []) => {
     .font("Helvetica-Bold")
     .fillColor(COLORS.text)
     .text("Señales y estrategias");
+
   doc.moveDown(0.5);
 
   addTextLine(doc, "Señales observables", sensoryProfile.stress_signals);
   addTextLine(doc, "Estrategias", sensoryProfile.support_strategies);
   addTextLine(doc, "Notas", sensoryProfile.notes);
+
   const previousProfile = sensoryHistory?.[1] || null;
   const changes = buildSensoryChanges(sensoryProfile, previousProfile);
 
@@ -390,7 +531,7 @@ const addSensoryProfileToPdf = (doc, sensoryProfile, sensoryHistory = []) => {
     .fontSize(13)
     .font("Helvetica-Bold")
     .fillColor(COLORS.text)
-    .text("Cambios recientes respecto a la version anterior");
+    .text("Cambios recientes respecto a la versión anterior");
 
   doc.moveDown(0.5);
 
@@ -399,13 +540,13 @@ const addSensoryProfileToPdf = (doc, sensoryProfile, sensoryHistory = []) => {
       .fontSize(11)
       .font("Helvetica")
       .fillColor(COLORS.muted)
-      .text("Todavia se necesita una version anterior para comparar cambios.");
+      .text("Todavía se necesita una versión anterior para comparar cambios.");
   } else if (changes.length === 0) {
     doc
       .fontSize(11)
       .font("Helvetica")
       .fillColor(COLORS.muted)
-      .text("No se detectaron cambios respecto a la version anterior.");
+      .text("No se detectaron cambios respecto a la versión anterior.");
   } else {
     changes.forEach((change) => {
       doc
@@ -493,7 +634,10 @@ const addWeeklySupportPlanToPdf = (doc, weeklySupportPlan) => {
         .font("Helvetica-Bold")
         .fillColor(COLORS.purple)
         .text(
-          `${safeText(item.day, "Día")} - ${safeText(item.title, "Actividad sugerida")}`,
+          `${safeText(item.day, "Día")} - ${safeText(
+            item.title,
+            "Actividad sugerida",
+          )}`,
         );
 
       if (item.action) {
@@ -596,7 +740,7 @@ const addWeeklySupportPlanHistoryToPdf = (doc, weeklyPlanHistory = []) => {
       doc
         .fontSize(9)
         .font("Helvetica-Bold")
-        .fillColor(COLORS.green || "#047857")
+        .fillColor(COLORS.green)
         .text("Plan más reciente");
     }
 
@@ -686,11 +830,12 @@ const addWeeklySupportPlanHistoryToPdf = (doc, weeklyPlanHistory = []) => {
 
   doc.fillColor(COLORS.text);
 };
+
 const buildEvolutionDashboardData = async ({
   userId,
   sensoryProfile,
-  sensoryHistory,
-  weeklyPlanHistory,
+  sensoryHistory = [],
+  weeklyPlanHistory = [],
   dashboard,
 }) => {
   const sensoryCountResult = await pool.query(
@@ -742,9 +887,9 @@ const buildEvolutionDashboardData = async ({
 
   if (Array.isArray(sensoryHistory)) {
     sensoryHistory.forEach((profile) => {
-      supportTerms.push(...splitTerms(profile.calming_items));
-      supportTerms.push(...splitTerms(profile.calming_activities));
-      strategyTerms.push(...splitTerms(profile.support_strategies));
+      supportTerms.push(...extractSupportTerms(profile.calming_items));
+      supportTerms.push(...extractSupportTerms(profile.calming_activities));
+      strategyTerms.push(...extractStrategyTerms(profile.support_strategies));
     });
   }
 
@@ -754,17 +899,22 @@ const buildEvolutionDashboardData = async ({
 
       if (Array.isArray(plan?.days)) {
         plan.days.forEach((day) => {
-          supportTerms.push(...splitTerms(day.action));
+          supportTerms.push(...extractSupportTerms(day.action));
+          strategyTerms.push(...extractStrategyTerms(day.action));
         });
       }
 
       if (Array.isArray(plan?.tips)) {
         plan.tips.forEach((tip) => {
-          strategyTerms.push(...splitTerms(tip));
+          strategyTerms.push(...extractStrategyTerms(tip));
         });
       }
     });
   }
+
+  const safeWeeklyPlanHistory = Array.isArray(weeklyPlanHistory)
+    ? weeklyPlanHistory
+    : [];
 
   const importantChanges = latestChanges.slice(0, 5).map((change) => ({
     title: change.label,
@@ -773,7 +923,7 @@ const buildEvolutionDashboardData = async ({
     type: "sensory_change",
   }));
 
-  weeklyPlanHistory.slice(0, 2).forEach((record) => {
+  safeWeeklyPlanHistory.slice(0, 2).forEach((record) => {
     const plan = parseWeeklyPlan(record.plan);
     const focus = record.focus || plan?.focus;
 
@@ -807,17 +957,21 @@ const addEvolutionDashboardToPdf = (doc, evolutionDashboard) => {
   addSectionTitle(doc, "Dashboard de evolución");
 
   const sensoryEvolution = evolutionDashboard.sensoryEvolution || {};
+
   const emotionalEvolution = Array.isArray(
     evolutionDashboard.emotionalEvolution,
   )
     ? evolutionDashboard.emotionalEvolution
     : [];
+
   const importantChanges = Array.isArray(evolutionDashboard.importantChanges)
     ? evolutionDashboard.importantChanges
     : [];
+
   const repeatedSupports = Array.isArray(evolutionDashboard.repeatedSupports)
     ? evolutionDashboard.repeatedSupports
     : [];
+
   const usefulStrategies = Array.isArray(evolutionDashboard.usefulStrategies)
     ? evolutionDashboard.usefulStrategies
     : [];
@@ -860,7 +1014,7 @@ const addEvolutionDashboardToPdf = (doc, evolutionDashboard) => {
       .fontSize(11)
       .font("Helvetica-Bold")
       .fillColor(COLORS.text)
-      .text("Ultima actualizacion sensorial:", {
+      .text("Última actualización sensorial:", {
         continued: true,
       });
 
@@ -882,11 +1036,11 @@ const addEvolutionDashboardToPdf = (doc, evolutionDashboard) => {
       let statusLabel = "Estable";
 
       if (emotion.status === "increased") {
-        statusLabel = "Aumento";
+        statusLabel = "Aumentó";
       }
 
       if (emotion.status === "decreased") {
-        statusLabel = "Disminuyo";
+        statusLabel = "Disminuyó";
       }
 
       doc
@@ -911,7 +1065,7 @@ const addEvolutionDashboardToPdf = (doc, evolutionDashboard) => {
       .fontSize(11)
       .font("Helvetica")
       .fillColor(COLORS.muted)
-      .text("Todavia no hay datos emocionales suficientes para comparar.");
+      .text("Todavía no hay datos emocionales suficientes para comparar.");
   }
 
   doc.moveDown(0.8);
@@ -979,7 +1133,7 @@ const addEvolutionDashboardToPdf = (doc, evolutionDashboard) => {
       .fontSize(11)
       .font("Helvetica")
       .fillColor(COLORS.muted)
-      .text("Todavia no hay apoyos repetidos registrados.");
+      .text("Todavía no hay apoyos repetidos registrados.");
   }
 
   doc.moveDown(0.8);
@@ -988,7 +1142,7 @@ const addEvolutionDashboardToPdf = (doc, evolutionDashboard) => {
     .fontSize(13)
     .font("Helvetica-Bold")
     .fillColor(COLORS.text)
-    .text("Estrategias que aparecen como utiles");
+    .text("Estrategias que aparecen como útiles");
 
   doc.moveDown(0.4);
 
@@ -1005,7 +1159,7 @@ const addEvolutionDashboardToPdf = (doc, evolutionDashboard) => {
       .fontSize(11)
       .font("Helvetica")
       .fillColor(COLORS.muted)
-      .text("Todavia no hay estrategias suficientes para comparar.");
+      .text("Todavía no hay estrategias suficientes para comparar.");
   }
 
   doc.fillColor(COLORS.text);
@@ -1111,17 +1265,17 @@ const buildReport = async (res, userId) => {
 
   doc.pipe(res);
 
-addCover(doc, user);
-addSummaryToPdf(doc, dashboard);
-addSensoryProfileToPdf(doc, sensoryProfile, sensoryHistory);
-addWeeklySupportPlanToPdf(doc, dashboard.weeklySupportPlan);
-addWeeklySupportPlanHistoryToPdf(doc, weeklyPlanHistory);
-addEvolutionDashboardToPdf(doc, evolutionDashboard);
-addEmotionalTrendToPdf(doc, dashboard);
-addRecommendationsToPdf(doc, dashboard);
-addFooter(doc);
+  addCover(doc, user);
+  addSummaryToPdf(doc, dashboard);
+  addSensoryProfileToPdf(doc, sensoryProfile, sensoryHistory);
+  addWeeklySupportPlanToPdf(doc, dashboard.weeklySupportPlan);
+  addWeeklySupportPlanHistoryToPdf(doc, weeklyPlanHistory);
+  addEvolutionDashboardToPdf(doc, evolutionDashboard);
+  addEmotionalTrendToPdf(doc, dashboard);
+  addRecommendationsToPdf(doc, dashboard);
+  addFooter(doc);
 
-doc.end();
+  doc.end();
 };
 
 const generateMyReport = async (req, res) => {

@@ -29,37 +29,184 @@ const safeText = (value) => {
   return typeof value === "string" ? value.trim() : "";
 };
 
-const splitTerms = (text) => {
+const normalizeText = (value) => {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+};
+
+const ignoredTerms = new Set([
+  "clara",
+  "claras",
+  "breve",
+  "breves",
+  "importante",
+  "importantes",
+  "actividad",
+  "actividades",
+  "accion",
+  "acciones",
+  "sugerida",
+  "sugeridas",
+  "estrategia",
+  "estrategias",
+  "felix",
+]);
+
+const supportPatterns = [
+  {
+    label: "Conversar sobre la emoción",
+    keywords: ["emocion", "emocional", "conversar", "preguntar que pudo"],
+  },
+  {
+    label: "Practicar conversaciones sociales",
+    keywords: ["practicar la conversacion", "conversacion social", "que decir"],
+  },
+  {
+    label: "Guiar rutina paso a paso",
+    keywords: ["rutina", "paso a paso", "repasar"],
+  },
+  {
+    label: "Anticipar antes de una actividad",
+    keywords: ["anticipar", "antes de una actividad", "preparar"],
+  },
+  {
+    label: "Ofrecer pausa o espacio tranquilo",
+    keywords: ["pausa", "descanso", "lugar tranquilo", "espacio tranquilo"],
+  },
+  {
+    label: "Usar objeto calmante",
+    keywords: ["objeto calmante", "manta", "peluche", "audifono", "audifonos"],
+  },
+  {
+    label: "Reducir estímulos sensoriales",
+    keywords: ["ruido", "luz", "textura", "multitud", "estimulo"],
+  },
+  {
+    label: "Realizar actividad calmante",
+    keywords: ["dibujar", "pintar", "colorear", "respirar", "musica"],
+  },
+  {
+    label: "Reforzar avances y logros",
+    keywords: ["logro", "logros", "felicitar", "esfuerzo", "avance", "avances"],
+  },
+];
+
+const strategyPatterns = [
+  {
+    label: "Usar frases cortas y claras",
+    keywords: ["frases cortas", "frase corta", "instrucciones simples"],
+  },
+  {
+    label: "Hablar con calma",
+    keywords: ["hablarle", "hablar con calma", "voz calmada", "tono calmo"],
+  },
+  {
+    label: "Anticipar cambios importantes",
+    keywords: ["anticipar cambios", "anticipar", "avisar antes", "preparar"],
+  },
+  {
+    label: "Ofrecer pausa",
+    keywords: ["pausa", "descanso", "detener", "espacio tranquilo"],
+  },
+  {
+    label: "Validar y nombrar la emoción",
+    keywords: ["validar", "nombrar la emocion", "reconocer la emocion"],
+  },
+  {
+    label: "Guiar paso a paso",
+    keywords: ["paso a paso", "guiar", "acompanar", "acompañar"],
+  },
+  {
+    label: "Reforzar avances pequeños",
+    keywords: ["reforzar", "felicitar", "logro", "avance"],
+  },
+  {
+    label: "Mantener rutina predecible",
+    keywords: ["rutina", "predecible", "estructura"],
+  },
+];
+
+const splitCandidatePhrases = (text) => {
   if (!text || typeof text !== "string") return [];
 
   return text
-    .split(/,|;|\n|\.| y /i)
+    .replace(/[“”"]/g, "")
+    .split(/,|;|\n|\.|\s+y\s+/gi)
     .map((item) => item.trim())
-    .filter((item) => item.length >= 3)
+    .filter((item) => item.length >= 4)
+    .filter((item) => item.length <= 90)
+    .filter((item) => !ignoredTerms.has(normalizeText(item)))
     .map((item) => item.charAt(0).toUpperCase() + item.slice(1));
+};
+
+const extractCategorizedTerms = (text, patterns, allowFallback = true) => {
+  const normalizedText = normalizeText(text);
+
+  if (!normalizedText || ignoredTerms.has(normalizedText)) {
+    return [];
+  }
+
+  const matchedLabels = patterns
+    .filter((pattern) =>
+      pattern.keywords.some((keyword) =>
+        normalizedText.includes(normalizeText(keyword)),
+      ),
+    )
+    .map((pattern) => pattern.label);
+
+  const uniqueLabels = [...new Set(matchedLabels)];
+
+  if (uniqueLabels.length > 0) {
+    return uniqueLabels;
+  }
+
+  if (!allowFallback) {
+    return [];
+  }
+
+  return splitCandidatePhrases(text).slice(0, 2);
+};
+
+const extractSupportTerms = (text) => {
+  return extractCategorizedTerms(text, supportPatterns, true);
+};
+
+const extractStrategyTerms = (text) => {
+  return extractCategorizedTerms(text, strategyPatterns, false);
 };
 
 const countRepeatedTerms = (terms) => {
   const map = new Map();
 
   terms.forEach((term) => {
-    const key = term.toLowerCase();
-    const current = map.get(key);
+    const cleanTerm = String(term || "").trim();
+
+    if (!cleanTerm) return;
+
+    const normalizedTerm = normalizeText(cleanTerm);
+
+    if (ignoredTerms.has(normalizedTerm)) return;
+
+    const current = map.get(normalizedTerm);
 
     if (current) {
-      map.set(key, {
+      map.set(normalizedTerm, {
         label: current.label,
         count: current.count + 1,
       });
     } else {
-      map.set(key, {
-        label: term,
+      map.set(normalizedTerm, {
+        label: cleanTerm,
         count: 1,
       });
     }
   });
 
   return Array.from(map.values())
+    .filter((item) => item.label.length >= 4)
     .sort((a, b) => b.count - a.count)
     .slice(0, 6);
 };
@@ -371,9 +518,9 @@ const getChildEvolutionDashboard = async (req, res) => {
     const strategyTerms = [];
 
     sensoryHistory.forEach((profile) => {
-      supportTerms.push(...splitTerms(profile.calming_items));
-      supportTerms.push(...splitTerms(profile.calming_activities));
-      strategyTerms.push(...splitTerms(profile.support_strategies));
+      supportTerms.push(...extractSupportTerms(profile.calming_items));
+      supportTerms.push(...extractSupportTerms(profile.calming_activities));
+      strategyTerms.push(...extractStrategyTerms(profile.support_strategies));
     });
 
     weeklyPlansResult.rows.forEach((record) => {
@@ -381,13 +528,14 @@ const getChildEvolutionDashboard = async (req, res) => {
 
       if (Array.isArray(plan?.tips)) {
         plan.tips.forEach((tip) => {
-          strategyTerms.push(...splitTerms(tip));
+          strategyTerms.push(...extractStrategyTerms(tip));
         });
       }
 
       if (Array.isArray(plan?.days)) {
         plan.days.forEach((day) => {
-          supportTerms.push(...splitTerms(day.action));
+          supportTerms.push(...extractSupportTerms(day.action));
+          strategyTerms.push(...extractStrategyTerms(day.action));
         });
       }
     });
@@ -400,11 +548,14 @@ const getChildEvolutionDashboard = async (req, res) => {
     }));
 
     weeklyPlansResult.rows.slice(0, 2).forEach((record) => {
-      if (record.focus) {
+      const plan = parsePlan(record.plan);
+      const focus = record.focus || plan?.focus;
+
+      if (focus) {
         importantChanges.push({
           title: `Plan semanal: ${record.title || "Plan guardado"}`,
           before: null,
-          after: record.focus,
+          after: focus,
           type: "weekly_plan_focus",
         });
       }
