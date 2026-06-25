@@ -6,11 +6,17 @@ const {
 
 const getRoutines = async (req, res) => {
   try {
-    const result = await pool.query(`
+    const user_id = req.user.id;
+
+    const result = await pool.query(
+      `
       SELECT * 
-      FROM "FloFlo"."routine" 
+      FROM "FloFlo"."routine"
+      WHERE user_id = $1
       ORDER BY start_time ASC;
-    `);
+      `,
+      [user_id],
+    );
 
     res.json(result.rows);
   } catch (error) {
@@ -34,6 +40,24 @@ const createRoutine = async (req, res) => {
       });
     }
 
+    const cleanName = String(name).trim();
+    const cleanDescription =
+      typeof description === "string" ? description.trim() : "";
+    const cleanStartTime = String(start_time).trim();
+    const cleanEndTime = String(end_time).trim();
+
+    if (!cleanName || !cleanStartTime || !cleanEndTime) {
+      return res.status(400).json({
+        message: "name, start_time y end_time son obligatorios",
+      });
+    }
+
+    if (cleanEndTime <= cleanStartTime) {
+      return res.status(400).json({
+        message: "La hora de término debe ser posterior a la hora de inicio",
+      });
+    }
+
     const result = await pool.query(
       `
       INSERT INTO "FloFlo".routine (
@@ -47,7 +71,7 @@ const createRoutine = async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, NOW())
       RETURNING *
       `,
-      [user_id, name, description || null, start_time, end_time]
+      [user_id, cleanName, cleanDescription, cleanStartTime, cleanEndTime],
     );
 
     res.status(201).json({
@@ -56,6 +80,7 @@ const createRoutine = async (req, res) => {
     });
   } catch (error) {
     console.error("Error creando rutina:", error);
+
     res.status(500).json({
       message: error.message,
     });
@@ -64,15 +89,17 @@ const createRoutine = async (req, res) => {
 
 const deleteRoutine = async (req, res) => {
   try {
+    const user_id = req.user.id;
     const { id } = req.params;
 
     const result = await pool.query(
       `
       DELETE FROM "FloFlo".routine
       WHERE id = $1
+      AND user_id = $2
       RETURNING *
       `,
-      [id]
+      [id, user_id],
     );
 
     if (result.rows.length === 0) {
@@ -96,6 +123,7 @@ const deleteRoutine = async (req, res) => {
 
 const updateRoutine = async (req, res) => {
   try {
+    const user_id = req.user.id;
     const { id } = req.params;
     const { name, start_time, end_time, description } = req.body;
 
@@ -105,7 +133,19 @@ const updateRoutine = async (req, res) => {
       });
     }
 
-    if (end_time <= start_time) {
+    const cleanName = String(name).trim();
+    const cleanDescription =
+      typeof description === "string" ? description.trim() : "";
+    const cleanStartTime = String(start_time).trim();
+    const cleanEndTime = String(end_time).trim();
+
+    if (!cleanName || !cleanStartTime || !cleanEndTime) {
+      return res.status(400).json({
+        message: "name, start_time y end_time son obligatorios",
+      });
+    }
+
+    if (cleanEndTime <= cleanStartTime) {
       return res.status(400).json({
         message: "La hora de término debe ser posterior a la hora de inicio",
       });
@@ -121,9 +161,10 @@ const updateRoutine = async (req, res) => {
         description = $4,
         updated_at = NOW()
       WHERE id = $5
+      AND user_id = $6
       RETURNING *
       `,
-      [name, start_time, end_time, description, id]
+      [cleanName, cleanStartTime, cleanEndTime, cleanDescription, id, user_id],
     );
 
     if (result.rows.length === 0) {
@@ -152,8 +193,25 @@ const calculateLevel = (points) => {
 
 const completeRoutine = async (req, res) => {
   try {
-    const user_id= req.user.id;
+    const user_id = req.user.id;
     const { id } = req.params;
+
+    const routine = await pool.query(
+      `
+      SELECT *
+      FROM "FloFlo".routine
+      WHERE id = $1
+      AND user_id = $2
+      LIMIT 1
+      `,
+      [id, user_id],
+    );
+
+    if (routine.rows.length === 0) {
+      return res.status(404).json({
+        message: "Rutina no encontrada",
+      });
+    }
 
     const existing = await pool.query(
       `
@@ -162,7 +220,7 @@ const completeRoutine = async (req, res) => {
       WHERE user_id = $1
       AND routine_id = $2
       `,
-      [user_id, id]
+      [user_id, id],
     );
 
     if (existing.rows.length > 0) {
@@ -183,10 +241,10 @@ const completeRoutine = async (req, res) => {
         points,
         completed_at
       )
-      VALUES ($1,$2,true,1,NOW())
+      VALUES ($1, $2, true, 1, NOW())
       RETURNING *
       `,
-      [user_id, id]
+      [user_id, id],
     );
 
     const currentProgress = await pool.query(
@@ -195,7 +253,7 @@ const completeRoutine = async (req, res) => {
       FROM "FloFlo".user_progress
       WHERE user_id = $1
       `,
-      [user_id]
+      [user_id],
     );
 
     let newPoints = 1;
@@ -213,7 +271,7 @@ const completeRoutine = async (req, res) => {
           updated_at = NOW()
         WHERE user_id = $3
         `,
-        [newPoints, calculateLevel(newPoints), user_id]
+        [newPoints, calculateLevel(newPoints), user_id],
       );
     } else {
       await pool.query(
@@ -229,9 +287,9 @@ const completeRoutine = async (req, res) => {
           completed_moods,
           updated_at
         )
-        VALUES ($1,$2,$3,0,0,1,0,NOW())
+        VALUES ($1, $2, $3, 0, 0, 1, 0, NOW())
         `,
-        [user_id, 1, 1]
+        [user_id, 1, 1],
       );
     }
 
