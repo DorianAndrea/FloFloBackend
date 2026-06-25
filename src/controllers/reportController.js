@@ -804,7 +804,7 @@ const buildEvolutionDashboardData = async ({
 const addEvolutionDashboardToPdf = (doc, evolutionDashboard) => {
   if (!evolutionDashboard) return;
 
-  addSectionTitle(doc, "Dashboard de evolucion");
+  addSectionTitle(doc, "Dashboard de evolución");
 
   const sensoryEvolution = evolutionDashboard.sensoryEvolution || {};
   const emotionalEvolution = Array.isArray(
@@ -836,7 +836,7 @@ const addEvolutionDashboardToPdf = (doc, evolutionDashboard) => {
     .fontSize(13)
     .font("Helvetica-Bold")
     .fillColor(COLORS.text)
-    .text("Evolucion sensorial");
+    .text("Evolución sensorial");
 
   doc.moveDown(0.4);
 
@@ -873,7 +873,7 @@ const addEvolutionDashboardToPdf = (doc, evolutionDashboard) => {
     .fontSize(13)
     .font("Helvetica-Bold")
     .fillColor(COLORS.text)
-    .text("Evolucion emocional semanal");
+    .text("Evolución emocional semanal");
 
   doc.moveDown(0.4);
 
@@ -962,7 +962,7 @@ const addEvolutionDashboardToPdf = (doc, evolutionDashboard) => {
     .fontSize(13)
     .font("Helvetica-Bold")
     .fillColor(COLORS.text)
-    .text("Apoyos que se repiten mas");
+    .text("Apoyos que se repiten más");
 
   doc.moveDown(0.4);
 
