@@ -179,6 +179,122 @@ const buildSensoryAlerts = (sensoryProfile, dashboardData) => {
 
   return alerts;
 };
+const buildWellnessStatus = ({
+  dashboardData,
+  sensoryProfile,
+  sensoryAlerts = [],
+  emotionalTrendRows = [],
+}) => {
+  const difficultMoods = ["Ansioso", "Asustado", "Enojado", "Triste"];
+
+  const latestMoodName = dashboardData.latestMood?.mood_name;
+  const reasons = [];
+  let score = 0;
+
+  const hasSensoryProfile =
+    sensoryProfile &&
+    [
+      sensoryProfile.noise_sensitivity,
+      sensoryProfile.light_sensitivity,
+      sensoryProfile.texture_sensitivity,
+      sensoryProfile.crowd_sensitivity,
+      sensoryProfile.calming_items,
+      sensoryProfile.calming_activities,
+      sensoryProfile.stress_signals,
+      sensoryProfile.support_strategies,
+      sensoryProfile.notes,
+    ].some(hasText);
+
+  if (difficultMoods.includes(latestMoodName)) {
+    score += 2;
+    reasons.push(`La última emoción registrada fue "${latestMoodName}".`);
+  }
+
+  const warningSensoryAlerts = sensoryAlerts.filter(
+    (alert) => alert.type === "warning",
+  );
+
+  if (warningSensoryAlerts.length > 0) {
+    score += warningSensoryAlerts.length * 2;
+    reasons.push(
+      "Existen alertas sensoriales o señales que conviene observar.",
+    );
+  }
+
+  const increasedDifficultMoods = emotionalTrendRows.filter((item) => {
+    const currentWeek = Number(item.current_week || 0);
+    const previousWeek = Number(item.previous_week || 0);
+
+    return (
+      difficultMoods.includes(item.mood_name) && currentWeek > previousWeek
+    );
+  });
+
+  if (increasedDifficultMoods.length > 0) {
+    score += increasedDifficultMoods.length * 2;
+
+    const moodNames = increasedDifficultMoods
+      .map((item) => item.mood_name)
+      .join(", ");
+
+    reasons.push(
+      `Aumentaron emociones que requieren observación: ${moodNames}.`,
+    );
+  }
+
+  if (dashboardData.emotions === 0) {
+    score += 1;
+    reasons.push("Todavía no hay emociones registradas esta semana.");
+  }
+
+  if (dashboardData.routines === 0) {
+    score += 1;
+    reasons.push("No hay rutinas registradas para apoyar anticipación.");
+  }
+
+  if (!hasSensoryProfile) {
+    score += 1;
+    reasons.push(
+      "No hay perfil sensorial completo para orientar mejor los apoyos.",
+    );
+  }
+
+  let level = "green";
+  let title = "Bienestar estable";
+  let message =
+    "Los registros actuales no muestran señales importantes de alerta.";
+  let icon = "🟢";
+  let suggestedAction =
+    "Mantener rutinas simples, reforzar avances y seguir registrando emociones.";
+
+  if (score >= 5) {
+    level = "red";
+    title = "Necesita apoyo cercano";
+    message =
+      "Hay varias señales que conviene acompañar con más atención durante estos días.";
+    icon = "🔴";
+    suggestedAction =
+      "Acompañar con calma, reducir exigencias, ofrecer pausas y observar señales de sobrecarga.";
+  } else if (score >= 2) {
+    level = "yellow";
+    title = "Requiere observación";
+    message =
+      "Hay algunos indicadores que sugieren observar cómo evoluciona durante la semana.";
+    icon = "🟡";
+    suggestedAction =
+      "Usar frases cortas, anticipar cambios y tener disponibles apoyos calmantes.";
+  }
+
+  return {
+    level,
+    title,
+    message,
+    icon,
+    score,
+    reasons: reasons.slice(0, 4),
+    suggestedAction,
+  };
+};
 
 const buildWeeklySupportPlan = (dashboardData, sensoryProfile) => {
   const childName = dashboardData.childName || "el niño/la niña";
@@ -744,6 +860,13 @@ const getParentDashboard = async (userId) => {
 
   const sensoryAlerts = buildSensoryAlerts(sensoryProfileData, dashboardData);
 
+  const wellnessStatus = buildWellnessStatus({
+    dashboardData,
+    sensoryProfile: sensoryProfileData,
+    sensoryAlerts,
+    emotionalTrendRows: emotionalTrend.rows,
+  });
+
   const weeklySupportPlan = buildWeeklySupportPlan(
     dashboardData,
     sensoryProfileData,
@@ -845,6 +968,7 @@ const getParentDashboard = async (userId) => {
     nextAchievement: getFirstRow(nextAchievement),
     emotionalTrend: emotionalTrend.rows,
     alerts,
+    wellnessStatus,
     activityCalendar: activityCalendar.rows,
     weeklySupportPlan,
     weeklySupportPlanRecord,
