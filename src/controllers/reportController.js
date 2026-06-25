@@ -10,6 +10,10 @@ const COLORS = {
   softGray: "#E5E7EB",
   green: "#047857",
   greenLight: "#ECFDF5",
+  yellow: "#B45309",
+  yellowLight: "#FFFBEB",
+  red: "#B91C1C",
+  redLight: "#FEF2F2",
 };
 
 const isValidId = (id) => {
@@ -377,6 +381,136 @@ const addSummaryToPdf = (doc, dashboard) => {
 
     doc.moveDown(0.35);
   });
+};
+const addWellnessStatusToPdf = (doc, wellnessStatus) => {
+  if (!wellnessStatus) return;
+
+  addSectionTitle(doc, "Semáforo de bienestar");
+
+  const reasons = Array.isArray(wellnessStatus.reasons)
+    ? wellnessStatus.reasons
+    : [];
+
+  const levelStyles = {
+    green: {
+      color: COLORS.green,
+      background: COLORS.greenLight,
+      label: "Bienestar estable",
+    },
+    yellow: {
+      color: COLORS.yellow,
+      background: COLORS.yellowLight,
+      label: "Requiere observación",
+    },
+    red: {
+      color: COLORS.red,
+      background: COLORS.redLight,
+      label: "Necesita apoyo cercano",
+    },
+  };
+
+  const currentStyle = levelStyles[wellnessStatus.level] || levelStyles.yellow;
+
+  const startY = doc.y;
+  const boxHeight = reasons.length > 0 ? 165 : 125;
+
+  doc
+    .roundedRect(50, startY, doc.page.width - 100, boxHeight, 14)
+    .fillAndStroke(currentStyle.background, currentStyle.color);
+
+  doc.y = startY + 18;
+
+  doc
+    .fontSize(13)
+    .font("Helvetica-Bold")
+    .fillColor(COLORS.muted)
+    .text("Estado general actual", 70, doc.y);
+
+  doc.moveDown(0.45);
+
+  const titleY = doc.y;
+
+  doc.circle(82, titleY + 13, 8).fill(currentStyle.color);
+
+  doc
+    .fontSize(20)
+    .font("Helvetica-Bold")
+    .fillColor(currentStyle.color)
+    .text(wellnessStatus.title || currentStyle.label, 100, titleY, {
+      width: doc.page.width - 180,
+    });
+
+  doc.y = titleY + 32;
+
+  doc
+    .fontSize(11)
+    .font("Helvetica")
+    .fillColor(COLORS.muted)
+    .text(
+      safeText(
+        wellnessStatus.message,
+        "Resumen general del estado actual según los registros recientes.",
+      ),
+      70,
+      doc.y,
+      {
+        width: doc.page.width - 140,
+      },
+    );
+
+  doc.moveDown(0.4);
+
+  doc
+    .fontSize(10)
+    .font("Helvetica-Bold")
+    .fillColor(currentStyle.color)
+    .text(`Puntaje: ${wellnessStatus.score ?? 0}`, 70, doc.y);
+
+  if (reasons.length > 0) {
+    doc.moveDown(0.5);
+
+    doc
+      .fontSize(11)
+      .font("Helvetica-Bold")
+      .fillColor(COLORS.text)
+      .text("Motivos principales:", 70, doc.y);
+
+    doc.moveDown(0.25);
+
+    reasons.slice(0, 4).forEach((reason) => {
+      doc
+        .fontSize(10)
+        .font("Helvetica")
+        .fillColor(COLORS.muted)
+        .text(`- ${reason}`, 82, doc.y, {
+          width: doc.page.width - 160,
+        });
+
+      doc.moveDown(0.2);
+    });
+  }
+
+  doc.y = startY + boxHeight + 18;
+
+  if (wellnessStatus.suggestedAction) {
+    doc
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .fillColor(COLORS.text)
+      .text("Acción sugerida:");
+
+    doc.moveDown(0.25);
+
+    doc
+      .fontSize(10.5)
+      .font("Helvetica")
+      .fillColor(COLORS.muted)
+      .text(wellnessStatus.suggestedAction);
+
+    doc.moveDown(0.7);
+  }
+
+  doc.fillColor(COLORS.text);
 };
 
 const formatDate = (date) => {
@@ -1267,6 +1401,7 @@ const buildReport = async (res, userId) => {
 
   addCover(doc, user);
   addSummaryToPdf(doc, dashboard);
+  addWellnessStatusToPdf(doc, dashboard.wellnessStatus);
   addSensoryProfileToPdf(doc, sensoryProfile, sensoryHistory);
   addWeeklySupportPlanToPdf(doc, dashboard.weeklySupportPlan);
   addWeeklySupportPlanHistoryToPdf(doc, weeklyPlanHistory);
