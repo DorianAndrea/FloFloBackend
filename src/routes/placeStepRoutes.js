@@ -5,6 +5,7 @@ const upload = require("../middleware/upload");
 const {
   getPlaceSteps,
   createPlaceStep,
+  replacePlaceSteps,
 } = require("../controllers/placeStepController");
 
 const router = express.Router();
@@ -21,5 +22,6 @@ router.post(
   upload.single("image"),
   createPlaceStep
 );
+router.put("/:id/steps/replace", authMiddleware, replacePlaceSteps);
 
 module.exports = router;
