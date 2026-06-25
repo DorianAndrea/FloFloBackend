@@ -25,6 +25,54 @@ const safeText = (value, fallback = "Sin información registrada") => {
   return hasText(value) ? String(value).trim() : fallback;
 };
 
+const splitTerms = (text) => {
+  if (!text || typeof text !== "string") return [];
+
+  const ignoredWords = [
+    "clara",
+    "claras",
+    "breve",
+    "breves",
+    "importante",
+    "importantes",
+    "actividad",
+    "actividades",
+  ];
+
+  return text
+    .split(/,|;|\n|\.| y /i)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 4)
+    .filter((item) => !ignoredWords.includes(item.toLowerCase()))
+    .filter((item) => item.length <= 90)
+    .map((item) => item.charAt(0).toUpperCase() + item.slice(1));
+};
+
+const countRepeatedTerms = (terms) => {
+  const map = new Map();
+
+  terms.forEach((term) => {
+    const key = term.toLowerCase();
+    const current = map.get(key);
+
+    if (current) {
+      map.set(key, {
+        label: current.label,
+        count: current.count + 1,
+      });
+    } else {
+      map.set(key, {
+        label: term,
+        count: 1,
+      });
+    }
+  });
+
+  return Array.from(map.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+};
+
 const getSensoryProfile = async (userId) => {
   const result = await pool.query(
     `
@@ -638,6 +686,330 @@ const addWeeklySupportPlanHistoryToPdf = (doc, weeklyPlanHistory = []) => {
 
   doc.fillColor(COLORS.text);
 };
+const buildEvolutionDashboardData = async ({
+  userId,
+  sensoryProfile,
+  sensoryHistory,
+  weeklyPlanHistory,
+  dashboard,
+}) => {
+  const sensoryCountResult = await pool.query(
+    `
+    SELECT COUNT(*) AS total
+    FROM "FloFlo".sensory_profile_history
+    WHERE user_id = $1
+    `,
+    [userId],
+  );
+
+  const totalSensoryVersions = Number(sensoryCountResult.rows[0]?.total || 0);
+
+  const previousProfile = sensoryHistory?.[1] || null;
+  const latestChanges = buildSensoryChanges(sensoryProfile, previousProfile);
+
+  const emotionalEvolution = Array.isArray(dashboard?.emotionalTrend)
+    ? dashboard.emotionalTrend.map((item) => {
+        const currentWeek = Number(item.current_week || 0);
+        const previousWeek = Number(item.previous_week || 0);
+        const difference = currentWeek - previousWeek;
+
+        let status = "stable";
+        let message = "Se mantuvo estable respecto a la semana anterior.";
+
+        if (difference > 0) {
+          status = "increased";
+          message = "Aumentó respecto a la semana anterior.";
+        }
+
+        if (difference < 0) {
+          status = "decreased";
+          message = "Disminuyó respecto a la semana anterior.";
+        }
+
+        return {
+          mood_name: item.mood_name,
+          current_week: currentWeek,
+          previous_week: previousWeek,
+          difference,
+          status,
+          message,
+        };
+      })
+    : [];
+
+  const supportTerms = [];
+  const strategyTerms = [];
+
+  if (Array.isArray(sensoryHistory)) {
+    sensoryHistory.forEach((profile) => {
+      supportTerms.push(...splitTerms(profile.calming_items));
+      supportTerms.push(...splitTerms(profile.calming_activities));
+      strategyTerms.push(...splitTerms(profile.support_strategies));
+    });
+  }
+
+  if (Array.isArray(weeklyPlanHistory)) {
+    weeklyPlanHistory.forEach((record) => {
+      const plan = parseWeeklyPlan(record.plan);
+
+      if (Array.isArray(plan?.days)) {
+        plan.days.forEach((day) => {
+          supportTerms.push(...splitTerms(day.action));
+        });
+      }
+
+      if (Array.isArray(plan?.tips)) {
+        plan.tips.forEach((tip) => {
+          strategyTerms.push(...splitTerms(tip));
+        });
+      }
+    });
+  }
+
+  const importantChanges = latestChanges.slice(0, 5).map((change) => ({
+    title: change.label,
+    before: change.before,
+    after: change.after,
+    type: "sensory_change",
+  }));
+
+  weeklyPlanHistory.slice(0, 2).forEach((record) => {
+    const plan = parseWeeklyPlan(record.plan);
+    const focus = record.focus || plan?.focus;
+
+    if (focus) {
+      importantChanges.push({
+        title: record.title || "Plan semanal",
+        before: null,
+        after: focus,
+        type: "weekly_plan_focus",
+      });
+    }
+  });
+
+  return {
+    sensoryEvolution: {
+      totalVersions: totalSensoryVersions,
+      lastUpdatedAt:
+        sensoryProfile?.updated_at || sensoryHistory?.[0]?.created_at || null,
+      latestChanges,
+    },
+    emotionalEvolution,
+    importantChanges,
+    repeatedSupports: countRepeatedTerms(supportTerms),
+    usefulStrategies: countRepeatedTerms(strategyTerms),
+  };
+};
+
+const addEvolutionDashboardToPdf = (doc, evolutionDashboard) => {
+  if (!evolutionDashboard) return;
+
+  addSectionTitle(doc, "Dashboard de evolucion");
+
+  const sensoryEvolution = evolutionDashboard.sensoryEvolution || {};
+  const emotionalEvolution = Array.isArray(
+    evolutionDashboard.emotionalEvolution,
+  )
+    ? evolutionDashboard.emotionalEvolution
+    : [];
+  const importantChanges = Array.isArray(evolutionDashboard.importantChanges)
+    ? evolutionDashboard.importantChanges
+    : [];
+  const repeatedSupports = Array.isArray(evolutionDashboard.repeatedSupports)
+    ? evolutionDashboard.repeatedSupports
+    : [];
+  const usefulStrategies = Array.isArray(evolutionDashboard.usefulStrategies)
+    ? evolutionDashboard.usefulStrategies
+    : [];
+
+  doc
+    .fontSize(11)
+    .font("Helvetica")
+    .fillColor(COLORS.muted)
+    .text(
+      "Resumen de cambios sensoriales, emocionales y apoyos que se repiten en el tiempo.",
+    );
+
+  doc.moveDown(0.9);
+
+  doc
+    .fontSize(13)
+    .font("Helvetica-Bold")
+    .fillColor(COLORS.text)
+    .text("Evolucion sensorial");
+
+  doc.moveDown(0.4);
+
+  doc
+    .fontSize(11)
+    .font("Helvetica-Bold")
+    .fillColor(COLORS.text)
+    .text("Versiones registradas:", {
+      continued: true,
+    });
+
+  doc
+    .font("Helvetica")
+    .fillColor(COLORS.muted)
+    .text(` ${sensoryEvolution.totalVersions || 0}`);
+
+  const lastUpdatedAt = formatDate(sensoryEvolution.lastUpdatedAt);
+
+  if (lastUpdatedAt) {
+    doc
+      .fontSize(11)
+      .font("Helvetica-Bold")
+      .fillColor(COLORS.text)
+      .text("Ultima actualizacion sensorial:", {
+        continued: true,
+      });
+
+    doc.font("Helvetica").fillColor(COLORS.muted).text(` ${lastUpdatedAt}`);
+  }
+
+  doc.moveDown(0.8);
+
+  doc
+    .fontSize(13)
+    .font("Helvetica-Bold")
+    .fillColor(COLORS.text)
+    .text("Evolucion emocional semanal");
+
+  doc.moveDown(0.4);
+
+  if (emotionalEvolution.length > 0) {
+    emotionalEvolution.slice(0, 6).forEach((emotion) => {
+      let statusLabel = "Estable";
+
+      if (emotion.status === "increased") {
+        statusLabel = "Aumento";
+      }
+
+      if (emotion.status === "decreased") {
+        statusLabel = "Disminuyo";
+      }
+
+      doc
+        .fontSize(11)
+        .font("Helvetica-Bold")
+        .fillColor(COLORS.purple)
+        .text(`${emotion.mood_name}:`, {
+          continued: true,
+        });
+
+      doc
+        .font("Helvetica")
+        .fillColor(COLORS.muted)
+        .text(
+          ` esta semana ${emotion.current_week}, semana anterior ${emotion.previous_week}. ${statusLabel}.`,
+        );
+
+      doc.moveDown(0.35);
+    });
+  } else {
+    doc
+      .fontSize(11)
+      .font("Helvetica")
+      .fillColor(COLORS.muted)
+      .text("Todavia no hay datos emocionales suficientes para comparar.");
+  }
+
+  doc.moveDown(0.8);
+
+  doc
+    .fontSize(13)
+    .font("Helvetica-Bold")
+    .fillColor(COLORS.text)
+    .text("Cambios recientes importantes");
+
+  doc.moveDown(0.4);
+
+  if (importantChanges.length > 0) {
+    importantChanges.slice(0, 6).forEach((change) => {
+      doc
+        .fontSize(11)
+        .font("Helvetica-Bold")
+        .fillColor(COLORS.purple)
+        .text(`- ${safeText(change.title, "Cambio detectado")}`);
+
+      if (change.before) {
+        doc
+          .fontSize(10)
+          .font("Helvetica")
+          .fillColor(COLORS.muted)
+          .text(`Antes: ${change.before}`);
+      }
+
+      doc
+        .fontSize(10)
+        .font("Helvetica")
+        .fillColor(COLORS.muted)
+        .text(`Ahora: ${safeText(change.after, "")}`);
+
+      doc.moveDown(0.45);
+    });
+  } else {
+    doc
+      .fontSize(11)
+      .font("Helvetica")
+      .fillColor(COLORS.muted)
+      .text("No hay cambios recientes importantes detectados.");
+  }
+
+  doc.moveDown(0.8);
+
+  doc
+    .fontSize(13)
+    .font("Helvetica-Bold")
+    .fillColor(COLORS.text)
+    .text("Apoyos que se repiten mas");
+
+  doc.moveDown(0.4);
+
+  if (repeatedSupports.length > 0) {
+    repeatedSupports.forEach((item) => {
+      doc
+        .fontSize(10)
+        .font("Helvetica")
+        .fillColor(COLORS.muted)
+        .text(`- ${item.label} (${item.count} vez/veces)`);
+    });
+  } else {
+    doc
+      .fontSize(11)
+      .font("Helvetica")
+      .fillColor(COLORS.muted)
+      .text("Todavia no hay apoyos repetidos registrados.");
+  }
+
+  doc.moveDown(0.8);
+
+  doc
+    .fontSize(13)
+    .font("Helvetica-Bold")
+    .fillColor(COLORS.text)
+    .text("Estrategias que aparecen como utiles");
+
+  doc.moveDown(0.4);
+
+  if (usefulStrategies.length > 0) {
+    usefulStrategies.forEach((item) => {
+      doc
+        .fontSize(10)
+        .font("Helvetica")
+        .fillColor(COLORS.muted)
+        .text(`- ${item.label} (${item.count} vez/veces)`);
+    });
+  } else {
+    doc
+      .fontSize(11)
+      .font("Helvetica")
+      .fillColor(COLORS.muted)
+      .text("Todavia no hay estrategias suficientes para comparar.");
+  }
+
+  doc.fillColor(COLORS.text);
+};
 
 const addEmotionalTrendToPdf = (doc, dashboard) => {
   addSectionTitle(doc, "Tendencia emocional");
@@ -707,6 +1079,14 @@ const buildReport = async (res, userId) => {
   const sensoryProfile = await getSensoryProfile(userId);
   const sensoryHistory = await getSensoryProfileHistory(userId);
 
+  const evolutionDashboard = await buildEvolutionDashboardData({
+    userId,
+    sensoryProfile,
+    sensoryHistory,
+    weeklyPlanHistory,
+    dashboard,
+  });
+
   const userResult = await pool.query(
     `
     SELECT "firstName", "lastName", email
@@ -731,16 +1111,17 @@ const buildReport = async (res, userId) => {
 
   doc.pipe(res);
 
-  addCover(doc, user);
-  addSummaryToPdf(doc, dashboard);
-  addSensoryProfileToPdf(doc, sensoryProfile, sensoryHistory);
-  addWeeklySupportPlanToPdf(doc, dashboard.weeklySupportPlan);
-  addWeeklySupportPlanHistoryToPdf(doc, weeklyPlanHistory);
-  addEmotionalTrendToPdf(doc, dashboard);
-  addRecommendationsToPdf(doc, dashboard);
-  addFooter(doc);
+addCover(doc, user);
+addSummaryToPdf(doc, dashboard);
+addSensoryProfileToPdf(doc, sensoryProfile, sensoryHistory);
+addWeeklySupportPlanToPdf(doc, dashboard.weeklySupportPlan);
+addWeeklySupportPlanHistoryToPdf(doc, weeklyPlanHistory);
+addEvolutionDashboardToPdf(doc, evolutionDashboard);
+addEmotionalTrendToPdf(doc, dashboard);
+addRecommendationsToPdf(doc, dashboard);
+addFooter(doc);
 
-  doc.end();
+doc.end();
 };
 
 const generateMyReport = async (req, res) => {
