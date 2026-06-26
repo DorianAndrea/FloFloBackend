@@ -359,11 +359,136 @@ const toggleFavoriteContactConversation = async (req, res) => {
   }
 };
 
+const updateContactConversation = async (req, res) => {
+  try {
+    const user_id = req.user.id;
+    const { id } = req.params;
+
+    const {
+      user_contact_id,
+      title,
+      situation,
+      what_to_say,
+      reminder,
+      correct_answer,
+      wrong_answer_1,
+      wrong_answer_2,
+    } = req.body;
+
+    if (!title || !situation || !what_to_say) {
+      return res.status(400).json({
+        message: "title, situation y what_to_say son obligatorios",
+      });
+    }
+
+    const ownership = await pool.query(
+      `
+      SELECT ucc.id
+      FROM "FloFlo".user_contact_conversation ucc
+      INNER JOIN "FloFlo".user_contact uc
+      ON uc.id = ucc.user_contact_id
+      WHERE ucc.id = $1
+      AND uc.user_id = $2
+      LIMIT 1
+      `,
+      [id, user_id],
+    );
+
+    if (ownership.rows.length === 0) {
+      return res.status(404).json({
+        message: "Conversación no encontrada para este usuario",
+      });
+    }
+
+    const result = await pool.query(
+      `
+      UPDATE "FloFlo".user_contact_conversation
+      SET
+        user_contact_id = $1,
+        title = $2,
+        situation = $3,
+        what_to_say = $4,
+        reminder = $5,
+        correct_answer = $6,
+        wrong_answer_1 = $7,
+        wrong_answer_2 = $8
+      WHERE id = $9
+      RETURNING *
+      `,
+      [
+        user_contact_id,
+        title,
+        situation,
+        what_to_say,
+        reminder || null,
+        correct_answer || null,
+        wrong_answer_1 || null,
+        wrong_answer_2 || null,
+        id,
+      ],
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Error actualizando conversación de contacto:", error);
+
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+const deleteContactConversation = async (req, res) => {
+  try {
+    const user_id = req.user.id;
+    const { id } = req.params;
+
+    const ownership = await pool.query(
+      `
+      SELECT ucc.id
+      FROM "FloFlo".user_contact_conversation ucc
+      INNER JOIN "FloFlo".user_contact uc
+      ON uc.id = ucc.user_contact_id
+      WHERE ucc.id = $1
+      AND uc.user_id = $2
+      LIMIT 1
+      `,
+      [id, user_id],
+    );
+
+    if (ownership.rows.length === 0) {
+      return res.status(404).json({
+        message: "Conversación no encontrada para este usuario",
+      });
+    }
+
+    await pool.query(
+      `
+      DELETE FROM "FloFlo".user_contact_conversation
+      WHERE id = $1
+      `,
+      [id],
+    );
+
+    res.json({
+      message: "Conversación eliminada correctamente",
+    });
+  } catch (error) {
+    console.error("Error eliminando conversación de contacto:", error);
+
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   getAllContactConversations,
-  createContactConversation,
   getContactConversationsByContactId,
-  getContactConversationProgress,
+  createContactConversation,
+  updateContactConversation,
+  deleteContactConversation,
   completeContactConversation,
+  getContactConversationProgress,
   toggleFavoriteContactConversation,
 };
