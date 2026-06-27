@@ -412,7 +412,7 @@ const forgotPassword = async (req, res) => {
       resetUrl,
     });
 
-    console.log("PASSWORD RESET URL:", resetUrl);
+    //console.log("PASSWORD RESET URL:", resetUrl);
 
     const response = {
       ...genericResponse,

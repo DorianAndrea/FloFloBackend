@@ -7,12 +7,12 @@ const getEmailFrom = () => {
 };
 
 const sendPasswordResetEmail = async ({ to, firstName, resetUrl }) => {
-  console.log("[emailService] Intentando enviar correo de recuperación a:", to);
-  console.log("[emailService] EMAIL_FROM:", getEmailFrom());
-  console.log(
-    "[emailService] RESEND_API_KEY configurada:",
-    Boolean(process.env.RESEND_API_KEY),
-  );
+  // console.log("[emailService] Intentando enviar correo de recuperación a:", to);
+  // console.log("[emailService] EMAIL_FROM:", getEmailFrom());
+  // console.log(
+  //   "[emailService] RESEND_API_KEY configurada:",
+  //   Boolean(process.env.RESEND_API_KEY),
+  // );
 
   if (!process.env.RESEND_API_KEY) {
     console.log("[emailService] RESEND_API_KEY no configurada. Link:", resetUrl);

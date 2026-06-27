@@ -2,7 +2,7 @@ const parentChildService = require("../services/parentChildService");
 
 const getMyChildren = async (req, res) => {
   try {
-    console.log("REQ USER", req.user)
+    //console.log("REQ USER", req.user)
     const parentId = req.user.id;
 
     if (req.user.role !== "parent") {

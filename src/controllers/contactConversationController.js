@@ -1,8 +1,116 @@
 const pool = require("../database/db");
 
+const createHttpError = (message, statusCode = 400) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
+const validatePositiveInteger = (value, label) => {
+  const numberValue = Number(value);
+
+  if (!Number.isInteger(numberValue) || numberValue <= 0) {
+    throw createHttpError(`${label} inválido`, 400);
+  }
+
+  return numberValue;
+};
+
+const calculateLevel = (points) => {
+  if (points >= 100) return 5;
+  if (points >= 50) return 4;
+  if (points >= 25) return 3;
+  if (points >= 10) return 2;
+  return 1;
+};
+
+const assertParentCanAccessChild = async (parentId, childId, client = pool) => {
+  const result = await client.query(
+    `
+    SELECT pc.child_id
+    FROM "FloFlo".parent_child pc
+    INNER JOIN "FloFlo"."user" u
+      ON u.id = pc.child_id
+    WHERE pc.parent_id = $1
+    AND pc.child_id = $2
+    AND u.role = 'child'
+    LIMIT 1
+    `,
+    [parentId, childId],
+  );
+
+  if (result.rows.length === 0) {
+    throw createHttpError("No tienes permiso para acceder a este niño/a", 403);
+  }
+
+  return true;
+};
+
+const resolveConversationOwnerId = async (req, client = pool) => {
+  const loggedUserId = validatePositiveInteger(req.user.id, "Usuario");
+  const childIdParam = req.params.childId;
+
+  if (!childIdParam) {
+    return {
+      ownerId: loggedUserId,
+      loggedUserId,
+      isParentManagingChild: false,
+    };
+  }
+
+  const childId = validatePositiveInteger(childIdParam, "Niño/a");
+
+  if (req.user.role !== "parent") {
+    throw createHttpError("Solo un padre/cuidador puede usar esta ruta", 403);
+  }
+
+  await assertParentCanAccessChild(loggedUserId, childId, client);
+
+  return {
+    ownerId: childId,
+    loggedUserId,
+    isParentManagingChild: true,
+  };
+};
+
+const validateContactOwnership = async (contactId, ownerId, client = pool) => {
+  const result = await client.query(
+    `
+    SELECT id
+    FROM "FloFlo".user_contact
+    WHERE id = $1
+    AND user_id = $2
+    LIMIT 1
+    `,
+    [contactId, ownerId],
+  );
+
+  return result.rows.length > 0;
+};
+
+const validateConversationOwnership = async (
+  conversationId,
+  ownerId,
+  client = pool,
+) => {
+  const result = await client.query(
+    `
+    SELECT id
+    FROM "FloFlo".user_contact_conversation
+    WHERE id = $1
+    AND user_id = $2
+    LIMIT 1
+    `,
+    [conversationId, ownerId],
+  );
+
+  return result.rows.length > 0;
+};
+
 const getAllContactConversations = async (req, res) => {
   try {
-    const user_id = req.user.id;
+    const { ownerId, isParentManagingChild } =
+      await resolveConversationOwnerId(req);
 
     const result = await pool.query(
       `
@@ -11,21 +119,28 @@ const getAllContactConversations = async (req, res) => {
       WHERE user_id = $1
       ORDER BY created_at DESC
       `,
-      [user_id],
+      [ownerId],
     );
 
-    res.json(result.rows);
+    res.json(
+      result.rows.map((conversation) => ({
+        ...conversation,
+        managed_by_parent: isParentManagingChild,
+      })),
+    );
   } catch (error) {
     console.error("Error obteniendo conversaciones:", error);
-    res.status(500).json({
-      message: "Error obteniendo conversaciones",
+
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error obteniendo conversaciones",
     });
   }
 };
 
 const createContactConversation = async (req, res) => {
   try {
-    const user_id = req.user.id;
+    const { ownerId, isParentManagingChild } =
+      await resolveConversationOwnerId(req);
 
     const {
       contact_id,
@@ -54,18 +169,12 @@ const createContactConversation = async (req, res) => {
       });
     }
 
-    const contactResult = await pool.query(
-      `
-      SELECT id
-      FROM "FloFlo".user_contact
-      WHERE id = $1
-      AND user_id = $2
-      LIMIT 1
-      `,
-      [finalContactId, user_id],
+    const ownsContact = await validateContactOwnership(
+      finalContactId,
+      ownerId,
     );
 
-    if (contactResult.rows.length === 0) {
+    if (!ownsContact) {
       return res.status(404).json({
         message: "Contacto no encontrado para este usuario",
       });
@@ -90,7 +199,7 @@ const createContactConversation = async (req, res) => {
       RETURNING *
       `,
       [
-        user_id,
+        ownerId,
         finalContactId,
         title,
         situation,
@@ -103,39 +212,37 @@ const createContactConversation = async (req, res) => {
     );
 
     res.status(201).json({
-      message: "Conversación creada correctamente",
-      conversation: result.rows[0],
+      message: isParentManagingChild
+        ? "Conversación creada correctamente para el niño/a"
+        : "Conversación creada correctamente",
+      managedByParent: isParentManagingChild,
+      conversation: {
+        ...result.rows[0],
+        managed_by_parent: isParentManagingChild,
+      },
     });
   } catch (error) {
     console.error("Error creando conversación:", error);
-    res.status(500).json({
+
+    res.status(error.statusCode || 500).json({
       message: error.message,
     });
   }
 };
+
 const getContactConversationsByContactId = async (req, res) => {
   try {
-    const user_id = req.user.id;
-    const contactId = Number(req.params.contactId);
+    const { ownerId, isParentManagingChild } =
+      await resolveConversationOwnerId(req);
 
-    if (!Number.isInteger(contactId) || contactId <= 0) {
-      return res.status(400).json({
-        message: "ID de contacto inválido",
-      });
-    }
-
-    const contactResult = await pool.query(
-      `
-      SELECT id
-      FROM "FloFlo".user_contact
-      WHERE id = $1
-      AND user_id = $2
-      LIMIT 1
-      `,
-      [contactId, user_id],
+    const contactId = validatePositiveInteger(
+      req.params.contactId,
+      "Contacto",
     );
 
-    if (contactResult.rows.length === 0) {
+    const ownsContact = await validateContactOwnership(contactId, ownerId);
+
+    if (!ownsContact) {
       return res.status(404).json({
         message: "Contacto no encontrado para este usuario",
       });
@@ -149,20 +256,28 @@ const getContactConversationsByContactId = async (req, res) => {
       AND user_contact_id = $2
       ORDER BY created_at DESC
       `,
-      [user_id, contactId],
+      [ownerId, contactId],
     );
 
-    res.json(result.rows);
+    res.json(
+      result.rows.map((conversation) => ({
+        ...conversation,
+        managed_by_parent: isParentManagingChild,
+      })),
+    );
   } catch (error) {
     console.error("Error obteniendo conversaciones del contacto:", error);
-    res.status(500).json({
+
+    res.status(error.statusCode || 500).json({
       message: error.message,
     });
   }
 };
+
 const getContactConversationProgress = async (req, res) => {
   try {
-    const user_id = req.user.id;
+    const { ownerId, isParentManagingChild } =
+      await resolveConversationOwnerId(req);
 
     const result = await pool.query(
       `
@@ -173,50 +288,56 @@ const getContactConversationProgress = async (req, res) => {
       WHERE user_id = $1
       ORDER BY completed_at DESC
       `,
-      [user_id],
+      [ownerId],
     );
 
-    res.json(result.rows);
+    res.json(
+      result.rows.map((progress) => ({
+        ...progress,
+        managed_by_parent: isParentManagingChild,
+      })),
+    );
   } catch (error) {
-    console.error("Error obteniendo progreso de conversaciones de contacto:", error);
+    console.error(
+      "Error obteniendo progreso de conversaciones de contacto:",
+      error,
+    );
 
-    res.status(500).json({
-      message: "Error obteniendo progreso de conversaciones de contacto",
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error obteniendo progreso de conversaciones de contacto",
     });
   }
 };
 
 const completeContactConversation = async (req, res) => {
+  const client = await pool.connect();
+
   try {
-    const user_id = req.user.id;
-    const conversationId = Number(req.params.id);
+    const { ownerId, isParentManagingChild } =
+      await resolveConversationOwnerId(req, client);
 
-    if (!Number.isInteger(conversationId) || conversationId <= 0) {
-      return res.status(400).json({
-        message: "ID de conversación inválido",
-      });
-    }
-
-    const conversationResult = await pool.query(
-      `
-      SELECT id
-      FROM "FloFlo".user_contact_conversation
-      WHERE id = $1
-      AND user_id = $2
-      LIMIT 1
-      `,
-      [conversationId, user_id],
+    const conversationId = validatePositiveInteger(
+      req.params.id,
+      "Conversación",
     );
 
-    if (conversationResult.rows.length === 0) {
+    await client.query("BEGIN");
+
+    const ownsConversation = await validateConversationOwnership(
+      conversationId,
+      ownerId,
+      client,
+    );
+
+    if (!ownsConversation) {
+      await client.query("ROLLBACK");
+
       return res.status(404).json({
         message: "Conversación no encontrada para este usuario",
       });
     }
 
-    await pool.query("BEGIN");
-
-    const progressInsert = await pool.query(
+    const progressInsert = await client.query(
       `
       INSERT INTO "FloFlo".user_contact_conversation_progress
       (
@@ -229,7 +350,7 @@ const completeContactConversation = async (req, res) => {
       DO NOTHING
       RETURNING *
       `,
-      [user_id, conversationId],
+      [ownerId, conversationId],
     );
 
     const alreadyCompleted = progressInsert.rows.length === 0;
@@ -237,21 +358,34 @@ const completeContactConversation = async (req, res) => {
     let progressResult;
 
     if (!alreadyCompleted) {
-      progressResult = await pool.query(
+      const currentProgress = await client.query(
         `
-        UPDATE "FloFlo".user_progress
-        SET
-          completed_conversations = COALESCE(completed_conversations, 0) + 1,
-          points = COALESCE(points, 0) + 10,
-          updated_at = NOW()
+        SELECT *
+        FROM "FloFlo".user_progress
         WHERE user_id = $1
-        RETURNING *
+        LIMIT 1
         `,
-        [user_id],
+        [ownerId],
       );
 
-      if (progressResult.rows.length === 0) {
-        progressResult = await pool.query(
+      if (currentProgress.rows.length > 0) {
+        const newPoints = Number(currentProgress.rows[0].points || 0) + 10;
+
+        progressResult = await client.query(
+          `
+          UPDATE "FloFlo".user_progress
+          SET
+            completed_conversations = COALESCE(completed_conversations, 0) + 1,
+            points = $1,
+            level = $2,
+            updated_at = NOW()
+          WHERE user_id = $3
+          RETURNING *
+          `,
+          [newPoints, calculateLevel(newPoints), ownerId],
+        );
+      } else {
+        progressResult = await client.query(
           `
           INSERT INTO "FloFlo".user_progress
           (
@@ -269,7 +403,7 @@ const completeContactConversation = async (req, res) => {
           (
             $1,
             10,
-            1,
+            $2,
             1,
             0,
             0,
@@ -279,51 +413,56 @@ const completeContactConversation = async (req, res) => {
           )
           RETURNING *
           `,
-          [user_id],
+          [ownerId, calculateLevel(10)],
         );
       }
     } else {
-      progressResult = await pool.query(
+      progressResult = await client.query(
         `
         SELECT *
         FROM "FloFlo".user_progress
         WHERE user_id = $1
         LIMIT 1
         `,
-        [user_id],
+        [ownerId],
       );
     }
 
-    await pool.query("COMMIT");
+    await client.query("COMMIT");
 
     res.json({
       message: alreadyCompleted
         ? "Conversación ya estaba completada"
-        : "Conversación completada correctamente",
+        : isParentManagingChild
+          ? "Conversación del niño/a completada correctamente"
+          : "Conversación completada correctamente",
       conversationId,
       alreadyCompleted,
+      managedByParent: isParentManagingChild,
       progress: progressResult.rows[0] || null,
     });
   } catch (error) {
-    await pool.query("ROLLBACK").catch(() => {});
+    await client.query("ROLLBACK").catch(() => {});
 
     console.error("Error completando conversación:", error);
 
-    res.status(500).json({
-      message: "Error completando conversación",
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error completando conversación",
     });
+  } finally {
+    client.release();
   }
 };
+
 const toggleFavoriteContactConversation = async (req, res) => {
   try {
-    const user_id = req.user.id;
-    const conversationId = Number(req.params.id);
+    const { ownerId, isParentManagingChild } =
+      await resolveConversationOwnerId(req);
 
-    if (!Number.isInteger(conversationId) || conversationId <= 0) {
-      return res.status(400).json({
-        message: "ID de conversación inválido",
-      });
-    }
+    const conversationId = validatePositiveInteger(
+      req.params.id,
+      "Conversación",
+    );
 
     const result = await pool.query(
       `
@@ -335,7 +474,7 @@ const toggleFavoriteContactConversation = async (req, res) => {
       AND user_id = $2
       RETURNING *
       `,
-      [conversationId, user_id],
+      [conversationId, ownerId],
     );
 
     if (result.rows.length === 0) {
@@ -348,55 +487,69 @@ const toggleFavoriteContactConversation = async (req, res) => {
       message: result.rows[0].is_favorite
         ? "Conversación marcada como favorita"
         : "Conversación quitada de favoritas",
-      conversation: result.rows[0],
+      managedByParent: isParentManagingChild,
+      conversation: {
+        ...result.rows[0],
+        managed_by_parent: isParentManagingChild,
+      },
     });
   } catch (error) {
     console.error("Error cambiando favorito de conversación de contacto:", error);
 
-    res.status(500).json({
-      message: "Error actualizando favorito",
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error actualizando favorito",
     });
   }
 };
 
 const updateContactConversation = async (req, res) => {
   try {
-    const user_id = req.user.id;
-    const { id } = req.params;
+    const { ownerId, isParentManagingChild } =
+      await resolveConversationOwnerId(req);
+
+    const id = validatePositiveInteger(req.params.id, "Conversación");
 
     const {
+      contact_id,
+      contactId,
       user_contact_id,
+      userContactId,
       title,
       situation,
       what_to_say,
+      whatToSay,
       reminder,
       correct_answer,
       wrong_answer_1,
       wrong_answer_2,
     } = req.body;
 
-    if (!title || !situation || !what_to_say) {
+    const finalContactId = Number(
+      contact_id || contactId || user_contact_id || userContactId,
+    );
+
+    const finalWhatToSay = what_to_say || whatToSay;
+
+    if (!finalContactId || !title || !situation || !finalWhatToSay) {
       return res.status(400).json({
-        message: "title, situation y what_to_say son obligatorios",
+        message:
+          "contact_id, title, situation y what_to_say son obligatorios",
       });
     }
 
-    const ownership = await pool.query(
-      `
-      SELECT ucc.id
-      FROM "FloFlo".user_contact_conversation ucc
-      INNER JOIN "FloFlo".user_contact uc
-      ON uc.id = ucc.user_contact_id
-      WHERE ucc.id = $1
-      AND uc.user_id = $2
-      LIMIT 1
-      `,
-      [id, user_id],
-    );
+    const ownsConversation = await validateConversationOwnership(id, ownerId);
 
-    if (ownership.rows.length === 0) {
+    if (!ownsConversation) {
       return res.status(404).json({
         message: "Conversación no encontrada para este usuario",
+      });
+    }
+
+    const ownsContact = await validateContactOwnership(finalContactId, ownerId);
+
+    if (!ownsContact) {
+      return res.status(404).json({
+        message: "Contacto no encontrado para este usuario",
       });
     }
 
@@ -411,74 +564,102 @@ const updateContactConversation = async (req, res) => {
         reminder = $5,
         correct_answer = $6,
         wrong_answer_1 = $7,
-        wrong_answer_2 = $8
+        wrong_answer_2 = $8,
+        updated_at = NOW()
       WHERE id = $9
+      AND user_id = $10
       RETURNING *
       `,
       [
-        user_contact_id,
+        finalContactId,
         title,
         situation,
-        what_to_say,
+        finalWhatToSay,
         reminder || null,
         correct_answer || null,
         wrong_answer_1 || null,
         wrong_answer_2 || null,
         id,
+        ownerId,
       ],
     );
 
-    res.json(result.rows[0]);
+    res.json({
+      ...result.rows[0],
+      managed_by_parent: isParentManagingChild,
+    });
   } catch (error) {
     console.error("Error actualizando conversación de contacto:", error);
 
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       message: error.message,
     });
   }
 };
 
 const deleteContactConversation = async (req, res) => {
-  try {
-    const user_id = req.user.id;
-    const { id } = req.params;
+  const client = await pool.connect();
 
-    const ownership = await pool.query(
-      `
-      SELECT ucc.id
-      FROM "FloFlo".user_contact_conversation ucc
-      INNER JOIN "FloFlo".user_contact uc
-      ON uc.id = ucc.user_contact_id
-      WHERE ucc.id = $1
-      AND uc.user_id = $2
-      LIMIT 1
-      `,
-      [id, user_id],
+  try {
+    const { ownerId, isParentManagingChild } =
+      await resolveConversationOwnerId(req, client);
+
+    const id = validatePositiveInteger(req.params.id, "Conversación");
+
+    await client.query("BEGIN");
+
+    const ownsConversation = await validateConversationOwnership(
+      id,
+      ownerId,
+      client,
     );
 
-    if (ownership.rows.length === 0) {
+    if (!ownsConversation) {
+      await client.query("ROLLBACK");
+
       return res.status(404).json({
         message: "Conversación no encontrada para este usuario",
       });
     }
 
-    await pool.query(
+    await client.query(
+      `
+      DELETE FROM "FloFlo".user_contact_conversation_progress
+      WHERE contact_conversation_id = $1
+      AND user_id = $2
+      `,
+      [id, ownerId],
+    );
+
+    const deleted = await client.query(
       `
       DELETE FROM "FloFlo".user_contact_conversation
       WHERE id = $1
+      AND user_id = $2
+      RETURNING *
       `,
-      [id],
+      [id, ownerId],
     );
 
+    await client.query("COMMIT");
+
     res.json({
-      message: "Conversación eliminada correctamente",
+      message: isParentManagingChild
+        ? "Conversación del niño/a eliminada correctamente"
+        : "Conversación eliminada correctamente",
+      managedByParent: isParentManagingChild,
+      conversation: deleted.rows[0],
     });
   } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+
     console.error("Error eliminando conversación de contacto:", error);
 
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       message: error.message,
     });
+  } finally {
+    client.release();
   }
 };
 
