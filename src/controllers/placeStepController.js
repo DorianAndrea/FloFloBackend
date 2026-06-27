@@ -1,12 +1,77 @@
 const pool = require("../database/db");
 
+const createHttpError = (message, statusCode = 400) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
 const isValidId = (id) => {
   const numberId = Number(id);
   return Number.isInteger(numberId) && numberId > 0;
 };
 
-const validatePlaceOwnership = async (placeId, userId) => {
-  const result = await pool.query(
+const validatePositiveInteger = (value, label) => {
+  const numberValue = Number(value);
+
+  if (!Number.isInteger(numberValue) || numberValue <= 0) {
+    throw createHttpError(`${label} inválido`, 400);
+  }
+
+  return numberValue;
+};
+
+const assertParentCanAccessChild = async (parentId, childId, client = pool) => {
+  const result = await client.query(
+    `
+    SELECT pc.child_id
+    FROM "FloFlo".parent_child pc
+    INNER JOIN "FloFlo"."user" u
+      ON u.id = pc.child_id
+    WHERE pc.parent_id = $1
+    AND pc.child_id = $2
+    AND u.role = 'child'
+    LIMIT 1
+    `,
+    [parentId, childId],
+  );
+
+  if (result.rows.length === 0) {
+    throw createHttpError("No tienes permiso para acceder a este niño/a", 403);
+  }
+
+  return true;
+};
+
+const resolvePlaceOwnerId = async (req, client = pool) => {
+  const loggedUserId = validatePositiveInteger(req.user.id, "Usuario");
+  const childIdParam = req.params.childId;
+
+  if (!childIdParam) {
+    return {
+      ownerId: loggedUserId,
+      loggedUserId,
+      isParentManagingChild: false,
+    };
+  }
+
+  const childId = validatePositiveInteger(childIdParam, "Niño/a");
+
+  if (req.user.role !== "parent") {
+    throw createHttpError("Solo un padre/cuidador puede usar esta ruta", 403);
+  }
+
+  await assertParentCanAccessChild(loggedUserId, childId, client);
+
+  return {
+    ownerId: childId,
+    loggedUserId,
+    isParentManagingChild: true,
+  };
+};
+
+const validatePlaceOwnership = async (placeId, ownerId, client = pool) => {
+  const result = await client.query(
     `
     SELECT id
     FROM "FloFlo".place
@@ -14,7 +79,7 @@ const validatePlaceOwnership = async (placeId, userId) => {
     AND user_id = $2
     LIMIT 1
     `,
-    [placeId, userId],
+    [placeId, ownerId],
   );
 
   return result.rows.length > 0;
@@ -22,7 +87,7 @@ const validatePlaceOwnership = async (placeId, userId) => {
 
 const getPlaceSteps = async (req, res) => {
   try {
-    const user_id = req.user.id;
+    const { ownerId, isParentManagingChild } = await resolvePlaceOwnerId(req);
     const { id } = req.params;
 
     if (!isValidId(id)) {
@@ -33,7 +98,7 @@ const getPlaceSteps = async (req, res) => {
 
     const placeId = Number(id);
 
-    const ownsPlace = await validatePlaceOwnership(placeId, user_id);
+    const ownsPlace = await validatePlaceOwnership(placeId, ownerId);
 
     if (!ownsPlace) {
       return res.status(404).json({
@@ -51,10 +116,16 @@ const getPlaceSteps = async (req, res) => {
       [placeId],
     );
 
-    res.json(result.rows);
+    res.json(
+      result.rows.map((step) => ({
+        ...step,
+        managed_by_parent: isParentManagingChild,
+      })),
+    );
   } catch (error) {
     console.error("Error obteniendo pasos del lugar:", error);
-    res.status(500).json({
+
+    res.status(error.statusCode || 500).json({
       message: error.message,
     });
   }
@@ -62,7 +133,7 @@ const getPlaceSteps = async (req, res) => {
 
 const createPlaceStep = async (req, res) => {
   try {
-    const user_id = req.user.id;
+    const { ownerId, isParentManagingChild } = await resolvePlaceOwnerId(req);
     const { id } = req.params;
 
     if (!isValidId(id)) {
@@ -73,7 +144,7 @@ const createPlaceStep = async (req, res) => {
 
     const placeId = Number(id);
 
-    const ownsPlace = await validatePlaceOwnership(placeId, user_id);
+    const ownsPlace = await validatePlaceOwnership(placeId, ownerId);
 
     if (!ownsPlace) {
       return res.status(404).json({
@@ -116,10 +187,14 @@ const createPlaceStep = async (req, res) => {
       [placeId, step_order, title, description || null, image],
     );
 
-    res.status(201).json(result.rows[0]);
+    res.status(201).json({
+      ...result.rows[0],
+      managed_by_parent: isParentManagingChild,
+    });
   } catch (error) {
     console.error("Error creando paso del lugar:", error);
-    res.status(500).json({
+
+    res.status(error.statusCode || 500).json({
       message: error.message,
     });
   }
@@ -129,7 +204,11 @@ const replacePlaceSteps = async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const user_id = req.user.id;
+    const { ownerId, isParentManagingChild } = await resolvePlaceOwnerId(
+      req,
+      client,
+    );
+
     const { id } = req.params;
     const { steps } = req.body;
 
@@ -141,7 +220,7 @@ const replacePlaceSteps = async (req, res) => {
 
     const placeId = Number(id);
 
-    const ownsPlace = await validatePlaceOwnership(placeId, user_id);
+    const ownsPlace = await validatePlaceOwnership(placeId, ownerId, client);
 
     if (!ownsPlace) {
       return res.status(404).json({
@@ -203,21 +282,27 @@ const replacePlaceSteps = async (req, res) => {
         [placeId, i + 1, `Paso ${i + 1}`, validSteps[i]],
       );
 
-      insertedSteps.push(result.rows[0]);
+      insertedSteps.push({
+        ...result.rows[0],
+        managed_by_parent: isParentManagingChild,
+      });
     }
 
     await client.query("COMMIT");
 
     res.json({
-      message: "Pasos del lugar actualizados correctamente",
+      message: isParentManagingChild
+        ? "Pasos del lugar del niño/a actualizados correctamente"
+        : "Pasos del lugar actualizados correctamente",
+      managedByParent: isParentManagingChild,
       steps: insertedSteps,
     });
   } catch (error) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {});
 
     console.error("Error reemplazando pasos del lugar:", error);
 
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       message: error.message,
     });
   } finally {

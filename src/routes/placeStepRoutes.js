@@ -10,18 +10,36 @@ const {
 
 const router = express.Router();
 
-router.get(
-  "/:id/steps",
+/*
+  Rutas padre/cuidador para pasos de lugares del hijo.
+*/
+router.get("/children/:childId/:id/steps", authMiddleware, getPlaceSteps);
+
+router.post(
+  "/children/:childId/:id/steps",
   authMiddleware,
-  getPlaceSteps
+  upload.single("image"),
+  createPlaceStep,
 );
+
+router.put(
+  "/children/:childId/:id/steps/replace",
+  authMiddleware,
+  replacePlaceSteps,
+);
+
+/*
+  Rutas normales del niño/a.
+*/
+router.get("/:id/steps", authMiddleware, getPlaceSteps);
 
 router.post(
   "/:id/steps",
   authMiddleware,
   upload.single("image"),
-  createPlaceStep
+  createPlaceStep,
 );
+
 router.put("/:id/steps/replace", authMiddleware, replacePlaceSteps);
 
 module.exports = router;
