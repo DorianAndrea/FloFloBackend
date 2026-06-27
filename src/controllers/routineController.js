@@ -42,7 +42,6 @@ const normalizeDaysOfWeek = (days) => {
   }
 
   const cleanDays = parsedDays.map((day) => String(day).trim().toLowerCase());
-
   const invalidDays = cleanDays.filter((day) => !ALL_DAYS.includes(day));
 
   if (invalidDays.length > 0) {
@@ -89,9 +88,68 @@ const calculateLevel = (points) => {
   return 1;
 };
 
+const validatePositiveInteger = (value, label) => {
+  const numberValue = Number(value);
+
+  if (!Number.isInteger(numberValue) || numberValue <= 0) {
+    throw createHttpError(`${label} inválido`, 400);
+  }
+
+  return numberValue;
+};
+
+const assertParentCanAccessChild = async (parentId, childId, client = pool) => {
+  const result = await client.query(
+    `
+    SELECT pc.child_id
+    FROM "FloFlo".parent_child pc
+    INNER JOIN "FloFlo"."user" u
+      ON u.id = pc.child_id
+    WHERE pc.parent_id = $1
+    AND pc.child_id = $2
+    AND u.role = 'child'
+    LIMIT 1
+    `,
+    [parentId, childId],
+  );
+
+  if (result.rows.length === 0) {
+    throw createHttpError("No tienes permiso para acceder a este niño/a", 403);
+  }
+
+  return true;
+};
+
+const resolveRoutineOwnerId = async (req, client = pool) => {
+  const loggedUserId = validatePositiveInteger(req.user.id, "Usuario");
+  const childIdParam = req.params.childId;
+
+  if (!childIdParam) {
+    return {
+      ownerId: loggedUserId,
+      loggedUserId,
+      isParentManagingChild: false,
+    };
+  }
+
+  const childId = validatePositiveInteger(childIdParam, "Niño/a");
+
+  if (req.user.role !== "parent") {
+    throw createHttpError("Solo un padre/cuidador puede usar esta ruta", 403);
+  }
+
+  await assertParentCanAccessChild(loggedUserId, childId, client);
+
+  return {
+    ownerId: childId,
+    loggedUserId,
+    isParentManagingChild: true,
+  };
+};
+
 const getRoutines = async (req, res) => {
   try {
-    const user_id = req.user.id;
+    const { ownerId, isParentManagingChild } = await resolveRoutineOwnerId(req);
     const { dateString } = getTodayInfo();
 
     const result = await pool.query(
@@ -113,23 +171,25 @@ const getRoutines = async (req, res) => {
       AND COALESCE(r.is_active, true) = true
       ORDER BY r.start_time ASC, r.name ASC
       `,
-      [user_id, dateString],
+      [ownerId, dateString],
     );
 
-    res.json(result.rows);
+    res.json(result.rows.map((routine) => ({
+      ...routine,
+      managed_by_parent: isParentManagingChild,
+    })));
   } catch (error) {
     console.error("Error obteniendo rutinas:", error);
 
-    res.status(500).json({
-      message: "Error obteniendo rutinas",
-      error: error.message,
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error obteniendo rutinas",
     });
   }
 };
 
 const getTodayRoutines = async (req, res) => {
   try {
-    const user_id = req.user.id;
+    const { ownerId, isParentManagingChild } = await resolveRoutineOwnerId(req);
     const { dateString, dayKey } = getTodayInfo();
 
     const result = await pool.query(
@@ -152,27 +212,31 @@ const getTodayRoutines = async (req, res) => {
       AND $3 = ANY(r.days_of_week)
       ORDER BY r.start_time ASC, r.name ASC
       `,
-      [user_id, dateString, dayKey],
+      [ownerId, dateString, dayKey],
     );
 
     res.json({
       date: dateString,
       day: dayKey,
-      routines: result.rows,
+      ownerId,
+      managedByParent: isParentManagingChild,
+      routines: result.rows.map((routine) => ({
+        ...routine,
+        managed_by_parent: isParentManagingChild,
+      })),
     });
   } catch (error) {
     console.error("Error obteniendo rutinas de hoy:", error);
 
-    res.status(500).json({
-      message: "Error obteniendo rutinas de hoy",
-      error: error.message,
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error obteniendo rutinas de hoy",
     });
   }
 };
 
 const getRoutineHistory = async (req, res) => {
   try {
-    const user_id = req.user.id;
+    const { ownerId, isParentManagingChild } = await resolveRoutineOwnerId(req);
     const limit = Math.min(Number(req.query.limit) || 50, 100);
 
     const result = await pool.query(
@@ -191,23 +255,27 @@ const getRoutineHistory = async (req, res) => {
       ORDER BY rp.completion_date DESC, rp.completed_at DESC
       LIMIT $2
       `,
-      [user_id, limit],
+      [ownerId, limit],
     );
 
-    res.json(result.rows);
+    res.json(
+      result.rows.map((item) => ({
+        ...item,
+        managed_by_parent: isParentManagingChild,
+      })),
+    );
   } catch (error) {
     console.error("Error obteniendo historial de rutinas:", error);
 
-    res.status(500).json({
-      message: "Error obteniendo historial de rutinas",
-      error: error.message,
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error obteniendo historial de rutinas",
     });
   }
 };
 
 const createRoutine = async (req, res) => {
   try {
-    const user_id = req.user.id;
+    const { ownerId, isParentManagingChild } = await resolveRoutineOwnerId(req);
 
     const {
       name,
@@ -260,7 +328,7 @@ const createRoutine = async (req, res) => {
       RETURNING *
       `,
       [
-        user_id,
+        ownerId,
         cleanName,
         cleanDescription,
         cleanStartTime,
@@ -270,7 +338,10 @@ const createRoutine = async (req, res) => {
     );
 
     res.status(201).json({
-      message: "Rutina creada correctamente",
+      message: isParentManagingChild
+        ? "Rutina creada correctamente para el niño/a"
+        : "Rutina creada correctamente",
+      managedByParent: isParentManagingChild,
       routine: result.rows[0],
     });
   } catch (error) {
@@ -284,8 +355,8 @@ const createRoutine = async (req, res) => {
 
 const updateRoutine = async (req, res) => {
   try {
-    const user_id = req.user.id;
-    const { id } = req.params;
+    const { ownerId, isParentManagingChild } = await resolveRoutineOwnerId(req);
+    const id = validatePositiveInteger(req.params.id, "Rutina");
 
     const {
       name,
@@ -349,7 +420,7 @@ const updateRoutine = async (req, res) => {
         cleanEndTime,
         cleanDaysOfWeek,
         id,
-        user_id,
+        ownerId,
       ],
     );
 
@@ -359,7 +430,10 @@ const updateRoutine = async (req, res) => {
       });
     }
 
-    res.json(result.rows[0]);
+    res.json({
+      ...result.rows[0],
+      managed_by_parent: isParentManagingChild,
+    });
   } catch (error) {
     console.error("Error actualizando rutina:", error);
 
@@ -371,8 +445,8 @@ const updateRoutine = async (req, res) => {
 
 const deleteRoutine = async (req, res) => {
   try {
-    const user_id = req.user.id;
-    const { id } = req.params;
+    const { ownerId, isParentManagingChild } = await resolveRoutineOwnerId(req);
+    const id = validatePositiveInteger(req.params.id, "Rutina");
 
     const result = await pool.query(
       `
@@ -385,7 +459,7 @@ const deleteRoutine = async (req, res) => {
       AND COALESCE(is_active, true) = true
       RETURNING *
       `,
-      [id, user_id],
+      [id, ownerId],
     );
 
     if (result.rows.length === 0) {
@@ -395,13 +469,16 @@ const deleteRoutine = async (req, res) => {
     }
 
     res.json({
-      message: "Rutina eliminada correctamente",
+      message: isParentManagingChild
+        ? "Rutina del niño/a eliminada correctamente"
+        : "Rutina eliminada correctamente",
+      managedByParent: isParentManagingChild,
       routine: result.rows[0],
     });
   } catch (error) {
     console.error("Error eliminando rutina:", error);
 
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       message: error.message,
     });
   }
@@ -411,8 +488,12 @@ const completeRoutine = async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const user_id = req.user.id;
-    const { id } = req.params;
+    const { ownerId, isParentManagingChild } = await resolveRoutineOwnerId(
+      req,
+      client,
+    );
+
+    const id = validatePositiveInteger(req.params.id, "Rutina");
     const { dateString, dayKey } = getTodayInfo();
 
     await client.query("BEGIN");
@@ -426,7 +507,7 @@ const completeRoutine = async (req, res) => {
       AND COALESCE(is_active, true) = true
       LIMIT 1
       `,
-      [id, user_id],
+      [id, ownerId],
     );
 
     if (routineResult.rows.length === 0) {
@@ -463,7 +544,7 @@ const completeRoutine = async (req, res) => {
       DO NOTHING
       RETURNING *
       `,
-      [user_id, id, dateString],
+      [ownerId, id, dateString],
     );
 
     let alreadyCompleted = false;
@@ -482,7 +563,7 @@ const completeRoutine = async (req, res) => {
         AND completion_date = $3
         LIMIT 1
         `,
-        [user_id, id, dateString],
+        [ownerId, id, dateString],
       );
 
       progressRow = existingProgress.rows[0] || null;
@@ -496,7 +577,7 @@ const completeRoutine = async (req, res) => {
         WHERE user_id = $1
         LIMIT 1
         `,
-        [user_id],
+        [ownerId],
       );
 
       if (currentProgress.rows.length > 0) {
@@ -513,7 +594,7 @@ const completeRoutine = async (req, res) => {
           WHERE user_id = $3
           RETURNING *
           `,
-          [newPoints, calculateLevel(newPoints), user_id],
+          [newPoints, calculateLevel(newPoints), ownerId],
         );
 
         userProgress = updatedProgress.rows[0] || null;
@@ -533,7 +614,7 @@ const completeRoutine = async (req, res) => {
           VALUES ($1, 1, 1, 0, 0, 1, 0, NOW())
           RETURNING *
           `,
-          [user_id],
+          [ownerId],
         );
 
         userProgress = createdProgress.rows[0] || null;
@@ -544,13 +625,17 @@ const completeRoutine = async (req, res) => {
 
     const unlockedAchievements = alreadyCompleted
       ? []
-      : await checkAndUnlockAchievements(user_id);
+      : await checkAndUnlockAchievements(ownerId);
 
     res.status(alreadyCompleted ? 200 : 201).json({
       message: alreadyCompleted
         ? "Rutina ya estaba completada hoy"
-        : "Rutina completada correctamente",
+        : isParentManagingChild
+          ? "Rutina del niño/a completada correctamente"
+          : "Rutina completada correctamente",
       alreadyCompleted,
+      managedByParent: isParentManagingChild,
+      ownerId,
       progress: progressRow,
       userProgress,
       unlockedAchievements,
@@ -560,7 +645,7 @@ const completeRoutine = async (req, res) => {
 
     console.error("Error completando rutina:", error);
 
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       message: error.message,
     });
   } finally {
