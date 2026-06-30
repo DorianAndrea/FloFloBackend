@@ -17,7 +17,7 @@ const profileRoutes = require("./routes/profileRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const parentDashboardRoutes = require("./routes/parentDashboardRoutes");
 const parentChildRoutes = require("./routes/parentChildRoutes");
-const sensoryProfileRoutes = require('./routes/sensoryProfileRoutes');
+const sensoryProfileRoutes = require("./routes/sensoryProfileRoutes");
 
 const app = express();
 
@@ -38,10 +38,6 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/conversations", conversationRoutes);
 app.use("/api/progress", progressRoutes);
 app.use("/api/achievements", achievementRoutes);
-app.use("/api/profile", profileRoutes);
-app.use("/api/report", reportRoutes);
-app.use("/api/parent-dashboard", parentDashboardRoutes);
-app.use("/api/parent-child", parentChildRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/report", reportRoutes);
 app.use("/api/parent-dashboard", parentDashboardRoutes);

@@ -52,4 +52,4 @@ router.put("/:id", authMiddleware, upload.single("image"), updateContact);
 
 router.delete("/:id", authMiddleware, deleteContact);
 
-module.exports = router;1
+module.exports = router;

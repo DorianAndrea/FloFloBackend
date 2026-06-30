@@ -4,9 +4,29 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+const cleanText = (value, maxLength = 500) => {
+  if (typeof value !== "string") return "";
+
+  return value.trim().slice(0, maxLength);
+};
+
+const parseAIJson = (content) => {
+  try {
+    return JSON.parse(content);
+  } catch (error) {
+    const customError = new Error("La IA no devolvió un JSON válido");
+    customError.statusCode = 502;
+    throw customError;
+  }
+};
+
 const generatePlaceSteps = async (req, res) => {
   try {
-    const { placeName, activity, people, transport, duration } = req.body;
+    const placeName = cleanText(req.body.placeName, 120);
+    const activity = cleanText(req.body.activity, 250);
+    const people = cleanText(req.body.people, 180);
+    const transport = cleanText(req.body.transport, 120);
+    const duration = cleanText(req.body.duration, 80);
 
     if (!placeName || !activity) {
       return res.status(400).json({
@@ -59,22 +79,26 @@ Instrucciones:
       temperature: 0.4,
     });
 
-    const content = response.choices[0].message.content;
-    const parsed = JSON.parse(content);
+    const content = response.choices[0]?.message?.content;
+    const parsed = parseAIJson(content);
 
     res.json(parsed);
   } catch (error) {
     console.error(error);
-    res.status(500).json({
-      message: "Error al generar pasos con IA",
-      error: error.message,
+    res.status(error.statusCode || 500).json({
+      message: error.statusCode
+        ? error.message
+        : "Error al generar pasos con IA",
     });
   }
 };
 
 const generateConversation = async (req, res) => {
   try {
-    const { topic, situation, person, emotion } = req.body;
+    const topic = cleanText(req.body.topic, 120);
+    const situation = cleanText(req.body.situation, 500);
+    const person = cleanText(req.body.person, 120);
+    const emotion = cleanText(req.body.emotion, 80);
 
     if (!topic || !situation) {
       return res.status(400).json({
@@ -142,22 +166,25 @@ Instrucciones:
       temperature: 0.4,
     });
 
-    const content = response.choices[0].message.content;
-    const parsed = JSON.parse(content);
+    const content = response.choices[0]?.message?.content;
+    const parsed = parseAIJson(content);
 
     res.json(parsed);
   } catch (error) {
     console.error(error);
-    res.status(500).json({
-      message: "Error al generar conversación con IA",
-      error: error.message,
+    res.status(error.statusCode || 500).json({
+      message: error.statusCode
+        ? error.message
+        : "Error al generar conversación con IA",
     });
   }
 };
 
 const generateContactConversation = async (req, res) => {
   try {
-    const { contactName, relationshipName, situation } = req.body;
+    const contactName = cleanText(req.body.contactName, 120);
+    const relationshipName = cleanText(req.body.relationshipName, 120);
+    const situation = cleanText(req.body.situation, 500);
 
     if (!contactName || !situation) {
       return res.status(400).json({
@@ -207,15 +234,16 @@ Reglas:
       temperature: 0.4,
     });
 
-    const content = response.choices[0].message.content;
-    const parsed = JSON.parse(content);
+    const content = response.choices[0]?.message?.content;
+    const parsed = parseAIJson(content);
 
     res.json(parsed);
   } catch (error) {
     console.error(error);
-    res.status(500).json({
-      message: "Error al generar conversación de contacto con IA",
-      error: error.message,
+    res.status(error.statusCode || 500).json({
+      message: error.statusCode
+        ? error.message
+        : "Error al generar conversación de contacto con IA",
     });
   }
 };

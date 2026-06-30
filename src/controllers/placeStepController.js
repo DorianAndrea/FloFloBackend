@@ -154,9 +154,16 @@ const createPlaceStep = async (req, res) => {
 
     const { step_order, title, description } = req.body;
 
-    if (!step_order || !title) {
+    const stepOrder = Number(step_order);
+
+    if (
+      !Number.isInteger(stepOrder) ||
+      stepOrder <= 0 ||
+      !String(title || "").trim()
+    ) {
       return res.status(400).json({
-        message: "step_order y title son obligatorios",
+        message:
+          "step_order debe ser un número positivo y title es obligatorio",
       });
     }
 
@@ -184,7 +191,7 @@ const createPlaceStep = async (req, res) => {
       )
       RETURNING *
       `,
-      [placeId, step_order, title, description || null, image],
+      [placeId, stepOrder, String(title).trim(), description || null, image],
     );
 
     res.status(201).json({

@@ -13,10 +13,13 @@ const isValidId = (id) => {
 const checkParentChildRelation = async (parentId, childId) => {
   const result = await pool.query(
     `
-    SELECT 1
-    FROM "FloFlo".parent_child
-    WHERE parent_id = $1
-    AND child_id = $2
+    SELECT pc.child_id
+    FROM "FloFlo".parent_child pc
+    INNER JOIN "FloFlo"."user" u
+      ON u.id = pc.child_id
+    WHERE pc.parent_id = $1
+      AND pc.child_id = $2
+      AND u.role = 'child'
     LIMIT 1
     `,
     [parentId, childId],
@@ -286,6 +289,13 @@ const parsePlan = (plan) => {
 
 const getMyDashboard = async (req, res) => {
   try {
+    if (req.user.role !== "child") {
+      return res.status(403).json({
+        message:
+          "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId",
+      });
+    }
+
     const userId = req.user.id;
 
     const dashboard = await getParentDashboard(userId);

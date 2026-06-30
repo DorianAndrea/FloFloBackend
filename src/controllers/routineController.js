@@ -174,10 +174,12 @@ const getRoutines = async (req, res) => {
       [ownerId, dateString],
     );
 
-    res.json(result.rows.map((routine) => ({
-      ...routine,
-      managed_by_parent: isParentManagingChild,
-    })));
+    res.json(
+      result.rows.map((routine) => ({
+        ...routine,
+        managed_by_parent: isParentManagingChild,
+      })),
+    );
   } catch (error) {
     console.error("Error obteniendo rutinas:", error);
 
@@ -237,7 +239,8 @@ const getTodayRoutines = async (req, res) => {
 const getRoutineHistory = async (req, res) => {
   try {
     const { ownerId, isParentManagingChild } = await resolveRoutineOwnerId(req);
-    const limit = Math.min(Number(req.query.limit) || 50, 100);
+    const requestedLimit = Number(req.query.limit) || 50;
+    const limit = Math.min(Math.max(requestedLimit, 1), 100);
 
     const result = await pool.query(
       `
@@ -250,7 +253,8 @@ const getRoutineHistory = async (req, res) => {
         r.days_of_week
       FROM "FloFlo".routine_progress rp
       INNER JOIN "FloFlo".routine r
-        ON r.id = rp.routine_id
+      ON r.id = rp.routine_id
+      AND r.user_id = rp.user_id
       WHERE rp.user_id = $1
       ORDER BY rp.completion_date DESC, rp.completed_at DESC
       LIMIT $2

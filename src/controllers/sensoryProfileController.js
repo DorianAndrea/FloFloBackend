@@ -29,10 +29,13 @@ const sanitizeProfilePayload = (body) => {
 const checkParentChildRelation = async (parentId, childId) => {
   const result = await pool.query(
     `
-    SELECT id
-    FROM "FloFlo".parent_child
-    WHERE parent_id = $1
-    AND child_id = $2
+    SELECT pc.child_id
+    FROM "FloFlo".parent_child pc
+    INNER JOIN "FloFlo"."user" u
+      ON u.id = pc.child_id
+    WHERE pc.parent_id = $1
+      AND pc.child_id = $2
+      AND u.role = 'child'
     LIMIT 1
     `,
     [parentId, childId],
@@ -120,6 +123,8 @@ const getSensoryProfileHistoryByUserId = async (userId) => {
 
 const getMySensoryProfile = async (req, res) => {
   try {
+    assertChildRole(req);
+
     const userId = req.user.id;
 
     const profile = await getProfileByUserId(userId);
@@ -128,8 +133,8 @@ const getMySensoryProfile = async (req, res) => {
   } catch (error) {
     console.error("Error obteniendo perfil sensorial:", error);
 
-    res.status(500).json({
-      message: "Error obteniendo perfil sensorial",
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error guardando perfil sensorial",
     });
   }
 };
@@ -138,6 +143,8 @@ const upsertMySensoryProfile = async (req, res) => {
   const client = await pool.connect();
 
   try {
+    assertChildRole(req);
+
     const userId = req.user.id;
     const data = sanitizeProfilePayload(req.body);
 
@@ -196,7 +203,7 @@ const upsertMySensoryProfile = async (req, res) => {
 
     res.status(200).json(profile);
   } catch (error) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {});
 
     console.error("Error guardando perfil sensorial:", error);
 
@@ -218,6 +225,16 @@ const getChildSensoryProfile = async (req, res) => {
         message: "Solo un padre o cuidador puede ver perfiles de hijos",
       });
     }
+
+    const assertChildRole = (req) => {
+      if (req.user.role !== "child") {
+        const error = new Error(
+          "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId",
+        );
+        error.statusCode = 403;
+        throw error;
+      }
+    };
 
     if (!isValidId(childId)) {
       return res.status(400).json({
@@ -249,6 +266,8 @@ const getChildSensoryProfile = async (req, res) => {
 
 const getMySensoryProfileHistory = async (req, res) => {
   try {
+    assertChildRole(req);
+
     const userId = req.user.id;
 
     const history = await getSensoryProfileHistoryByUserId(userId);
@@ -257,8 +276,8 @@ const getMySensoryProfileHistory = async (req, res) => {
   } catch (error) {
     console.error("Error obteniendo historial sensorial propio:", error);
 
-    res.status(500).json({
-      message: "Error obteniendo historial sensorial",
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error obteniendo historial sensorial",
     });
   }
 };

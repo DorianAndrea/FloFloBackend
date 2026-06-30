@@ -1,8 +1,6 @@
 const pool = require("../database/db");
 
-const {
-  unlockAchievement,
-} = require("../services/achievementService");
+const { unlockAchievement } = require("../services/achievementService");
 
 const calculateLevel = (points) => {
   if (points >= 100) return 5;
@@ -55,6 +53,13 @@ const resolveConversationOwnerId = async (req, client = pool) => {
   const childIdParam = req.params.childId;
 
   if (!childIdParam) {
+    if (req.user.role !== "child") {
+      throw createHttpError(
+        "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId",
+        403,
+      );
+    }
+
     return {
       ownerId: loggedUserId,
       loggedUserId,
@@ -161,8 +166,10 @@ const createConversation = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const { ownerId, isParentManagingChild } =
-      await resolveConversationOwnerId(req, client);
+    const { ownerId, isParentManagingChild } = await resolveConversationOwnerId(
+      req,
+      client,
+    );
 
     const { title, situation, what_to_say, reminder, messages, exercise } =
       req.body;
@@ -289,6 +296,7 @@ const getConversations = async (req, res) => {
       FROM "FloFlo".user_contact_conversation ucc
       LEFT JOIN "FloFlo".user_contact uc
         ON ucc.user_contact_id = uc.id
+        AND uc.user_id = ucc.user_id
       WHERE ucc.user_id = $1
       ORDER BY ucc.created_at DESC
       `,
@@ -317,8 +325,10 @@ const completeConversation = async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const { ownerId, isParentManagingChild } =
-      await resolveConversationOwnerId(req, client);
+    const { ownerId, isParentManagingChild } = await resolveConversationOwnerId(
+      req,
+      client,
+    );
 
     const id = validatePositiveInteger(req.params.id, "Conversación");
 
@@ -570,7 +580,8 @@ const getPaginatedConversations = async (req, res) => {
       SELECT COUNT(*) AS total
       FROM "FloFlo".user_contact_conversation ucc
       LEFT JOIN "FloFlo".user_contact uc
-        ON ucc.user_contact_id = uc.id
+      ON ucc.user_contact_id = uc.id
+      AND uc.user_id = ucc.user_id
       WHERE ucc.user_id = $1
       AND (
         $2 = ''
@@ -647,11 +658,6 @@ const toggleFavoriteConversation = async (req, res) => {
 
     const id = validatePositiveInteger(req.params.id, "Conversación");
 
-    await pool.query(`
-      ALTER TABLE "FloFlo".user_contact_conversation
-      ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT false
-    `);
-
     const result = await pool.query(
       `
       UPDATE "FloFlo".user_contact_conversation
@@ -690,8 +696,10 @@ const deleteConversation = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const { ownerId, isParentManagingChild } =
-      await resolveConversationOwnerId(req, client);
+    const { ownerId, isParentManagingChild } = await resolveConversationOwnerId(
+      req,
+      client,
+    );
 
     const id = validatePositiveInteger(req.params.id, "Conversación");
 
@@ -797,8 +805,10 @@ const updateConversation = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const { ownerId, isParentManagingChild } =
-      await resolveConversationOwnerId(req, client);
+    const { ownerId, isParentManagingChild } = await resolveConversationOwnerId(
+      req,
+      client,
+    );
 
     const id = validatePositiveInteger(req.params.id, "Conversación");
 

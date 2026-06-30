@@ -157,9 +157,18 @@ const createContactConversation = async (req, res) => {
       reminder,
     } = req.body;
 
-    const finalContactId = Number(
-      contact_id || contactId || user_contact_id || userContactId,
-    );
+    if (
+      !title ||
+      !String(title).trim() ||
+      !situation ||
+      !String(situation).trim() ||
+      !finalWhatToSay ||
+      !String(finalWhatToSay).trim()
+    ) {
+      return res.status(400).json({
+        message: "contact_id, title, situation y what_to_say son obligatorios",
+      });
+    }
 
     const finalWhatToSay = what_to_say || whatToSay;
 
@@ -169,10 +178,7 @@ const createContactConversation = async (req, res) => {
       });
     }
 
-    const ownsContact = await validateContactOwnership(
-      finalContactId,
-      ownerId,
-    );
+    const ownsContact = await validateContactOwnership(finalContactId, ownerId);
 
     if (!ownsContact) {
       return res.status(404).json({
@@ -235,10 +241,7 @@ const getContactConversationsByContactId = async (req, res) => {
     const { ownerId, isParentManagingChild } =
       await resolveConversationOwnerId(req);
 
-    const contactId = validatePositiveInteger(
-      req.params.contactId,
-      "Contacto",
-    );
+    const contactId = validatePositiveInteger(req.params.contactId, "Contacto");
 
     const ownsContact = await validateContactOwnership(contactId, ownerId);
 
@@ -282,11 +285,14 @@ const getContactConversationProgress = async (req, res) => {
     const result = await pool.query(
       `
       SELECT
-        contact_conversation_id,
-        completed_at
-      FROM "FloFlo".user_contact_conversation_progress
-      WHERE user_id = $1
-      ORDER BY completed_at DESC
+        p.contact_conversation_id,
+        p.completed_at
+    FROM "FloFlo".user_contact_conversation_progress p
+    INNER JOIN "FloFlo".user_contact_conversation c
+      ON c.id = p.contact_conversation_id
+      AND c.user_id = p.user_id
+    WHERE p.user_id = $1
+    ORDER BY p.completed_at DESC
       `,
       [ownerId],
     );
@@ -304,7 +310,9 @@ const getContactConversationProgress = async (req, res) => {
     );
 
     res.status(error.statusCode || 500).json({
-      message: error.message || "Error obteniendo progreso de conversaciones de contacto",
+      message:
+        error.message ||
+        "Error obteniendo progreso de conversaciones de contacto",
     });
   }
 };
@@ -313,8 +321,10 @@ const completeContactConversation = async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const { ownerId, isParentManagingChild } =
-      await resolveConversationOwnerId(req, client);
+    const { ownerId, isParentManagingChild } = await resolveConversationOwnerId(
+      req,
+      client,
+    );
 
     const conversationId = validatePositiveInteger(
       req.params.id,
@@ -494,7 +504,10 @@ const toggleFavoriteContactConversation = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error cambiando favorito de conversación de contacto:", error);
+    console.error(
+      "Error cambiando favorito de conversación de contacto:",
+      error,
+    );
 
     res.status(error.statusCode || 500).json({
       message: error.message || "Error actualizando favorito",
@@ -524,16 +537,16 @@ const updateContactConversation = async (req, res) => {
       wrong_answer_2,
     } = req.body;
 
-    const finalContactId = Number(
+    const finalContactId = validatePositiveInteger(
       contact_id || contactId || user_contact_id || userContactId,
+      "Contacto",
     );
 
     const finalWhatToSay = what_to_say || whatToSay;
 
     if (!finalContactId || !title || !situation || !finalWhatToSay) {
       return res.status(400).json({
-        message:
-          "contact_id, title, situation y what_to_say son obligatorios",
+        message: "contact_id, title, situation y what_to_say son obligatorios",
       });
     }
 
@@ -601,8 +614,10 @@ const deleteContactConversation = async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const { ownerId, isParentManagingChild } =
-      await resolveConversationOwnerId(req, client);
+    const { ownerId, isParentManagingChild } = await resolveConversationOwnerId(
+      req,
+      client,
+    );
 
     const id = validatePositiveInteger(req.params.id, "Conversación");
 

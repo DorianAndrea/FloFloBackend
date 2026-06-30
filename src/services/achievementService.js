@@ -1,20 +1,6 @@
 const pool = require("../database/db");
 
 const unlockAchievement = async (userId, achievementId) => {
-  const existing = await pool.query(
-    `
-    SELECT *
-    FROM "FloFlo".user_achievement
-    WHERE user_id = $1
-    AND achievement_id = $2
-    `,
-    [Number(userId), Number(achievementId)]
-  );
-
-  if (existing.rows.length > 0) {
-    return null;
-  }
-
   const result = await pool.query(
     `
     INSERT INTO "FloFlo".user_achievement
@@ -24,12 +10,14 @@ const unlockAchievement = async (userId, achievementId) => {
       unlocked_at
     )
     VALUES ($1, $2, NOW())
+    ON CONFLICT (user_id, achievement_id)
+    DO NOTHING
     RETURNING *
     `,
-    [Number(userId), Number(achievementId)]
+    [Number(userId), Number(achievementId)],
   );
 
-  return result.rows[0];
+  return result.rows[0] || null;
 };
 
 const checkAndUnlockAchievements = async (userId) => {
@@ -39,7 +27,7 @@ const checkAndUnlockAchievements = async (userId) => {
     FROM "FloFlo".user_progress
     WHERE user_id = $1
     `,
-    [Number(userId)]
+    [Number(userId)],
   );
 
   if (progressResult.rows.length === 0) {
@@ -53,7 +41,7 @@ const checkAndUnlockAchievements = async (userId) => {
     SELECT *
     FROM "FloFlo".achievement
     ORDER BY required_value ASC
-    `
+    `,
   );
 
   const unlockedAchievements = [];
@@ -116,7 +104,7 @@ const getAchievementsByUser = async (userId) => {
       AND ua.user_id = $1
     ORDER BY a.id;
     `,
-    [Number(userId)]
+    [Number(userId)],
   );
 
   return result.rows;

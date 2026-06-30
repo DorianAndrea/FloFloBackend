@@ -25,7 +25,9 @@ const getMyChildren = async (req, res) => {
 const linkChildToMe = async (req, res) => {
   try {
     const parentId = req.user.id;
-    const { childEmail } = req.body;
+    const childEmail = String(req.body.childEmail || "")
+      .trim()
+      .toLowerCase();
 
     if (req.user.role !== "parent") {
       return res.status(403).json({
@@ -41,7 +43,7 @@ const linkChildToMe = async (req, res) => {
 
     const result = await parentChildService.linkChildToParent(
       parentId,
-      childEmail
+      childEmail,
     );
 
     if (!result) {

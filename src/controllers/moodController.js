@@ -55,13 +55,20 @@ const resolveMoodOwnerId = async (req, client = pool) => {
   const childIdParam = req.params.childId;
 
   if (!childIdParam) {
-    return {
-      ownerId: loggedUserId,
-      actorId: loggedUserId,
-      isParentManagingChild: false,
-      source: "child",
-    };
+  if (req.user.role !== "child") {
+    throw createHttpError(
+      "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId",
+      403,
+    );
   }
+
+  return {
+    ownerId: loggedUserId,
+    actorId: loggedUserId,
+    isParentManagingChild: false,
+    source: "child",
+  };
+}
 
   const childId = validatePositiveInteger(childIdParam, "Niño/a");
 

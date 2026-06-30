@@ -14,6 +14,7 @@ const getChildrenByParent = async (parentId) => {
     JOIN "FloFlo"."user" c
       ON c.id = pc.child_id
     WHERE pc.parent_id = $1
+      AND c.role = 'child'
     ORDER BY c."firstName" ASC
     `,
     [parentId],
@@ -23,14 +24,16 @@ const getChildrenByParent = async (parentId) => {
 };
 
 const linkChildToParent = async (parentId, childEmail) => {
+  const normalizedEmail = String(childEmail || "").trim().toLowerCase();
+
   const childResult = await pool.query(
     `
     SELECT id, "firstName", "lastName", email, role
     FROM "FloFlo"."user"
-    WHERE email = $1
-    AND role = 'child'
+    WHERE LOWER(email) = $1
+      AND role = 'child'
     `,
-    [childEmail],
+    [normalizedEmail],
   );
 
   if (childResult.rows.length === 0) {
@@ -38,6 +41,10 @@ const linkChildToParent = async (parentId, childEmail) => {
   }
 
   const child = childResult.rows[0];
+
+  if (Number(parentId) === Number(child.id)) {
+    throw new Error("Un cuidador no puede asociarse a sí mismo");
+  }
 
   const relationResult = await pool.query(
     `
@@ -57,7 +64,39 @@ const linkChildToParent = async (parentId, childEmail) => {
   };
 };
 
+const isChildLinkedToParent = async (parentId, childId) => {
+  const result = await pool.query(
+    `
+    SELECT 1
+    FROM "FloFlo".parent_child pc
+    JOIN "FloFlo"."user" c
+      ON c.id = pc.child_id
+    WHERE pc.parent_id = $1
+      AND pc.child_id = $2
+      AND c.role = 'child'
+    LIMIT 1
+    `,
+    [parentId, childId],
+  );
+
+  return result.rows.length > 0;
+};
+
+const assertChildBelongsToParent = async (parentId, childId) => {
+  const linked = await isChildLinkedToParent(parentId, childId);
+
+  if (!linked) {
+    const error = new Error("No tienes permiso para acceder a este niño/a");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  return true;
+};
+
 module.exports = {
   getChildrenByParent,
-  linkChildToParent
+  linkChildToParent,
+  isChildLinkedToParent,
+  assertChildBelongsToParent,
 };

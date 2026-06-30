@@ -21,6 +21,24 @@ const isValidId = (id) => {
   return Number.isInteger(numberId) && numberId > 0;
 };
 
+const checkParentChildRelation = async (parentId, childId) => {
+  const result = await pool.query(
+    `
+    SELECT pc.child_id
+    FROM "FloFlo".parent_child pc
+    INNER JOIN "FloFlo"."user" u
+      ON u.id = pc.child_id
+    WHERE pc.parent_id = $1
+      AND pc.child_id = $2
+      AND u.role = 'child'
+    LIMIT 1
+    `,
+    [parentId, childId],
+  );
+
+  return result.rows.length > 0;
+};
+
 const hasText = (value) => {
   return typeof value === "string" && value.trim().length > 0;
 };
@@ -1377,10 +1395,10 @@ const buildReport = async (res, userId) => {
 
   const userResult = await pool.query(
     `
-    SELECT "firstName", "lastName", email
-    FROM "FloFlo".user
-    WHERE id = $1
-    `,
+  SELECT "firstName", "lastName", email
+  FROM "FloFlo"."user"
+  WHERE id = $1
+  `,
     [userId],
   );
 
@@ -1415,6 +1433,13 @@ const buildReport = async (res, userId) => {
 
 const generateMyReport = async (req, res) => {
   try {
+    if (req.user.role !== "child") {
+      return res.status(403).json({
+        message:
+          "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId",
+      });
+    }
+
     const userId = req.user.id;
 
     await buildReport(res, userId);
@@ -1422,8 +1447,8 @@ const generateMyReport = async (req, res) => {
     console.error("Error generando mi reporte:", error);
 
     if (!res.headersSent) {
-      return res.status(500).json({
-        message: "Error al generar reporte PDF",
+      return res.status(error.statusCode || 500).json({
+        message: error.message || "Error al generar reporte PDF",
       });
     }
   }
@@ -1446,18 +1471,12 @@ const generateChildReport = async (req, res) => {
       });
     }
 
-    const relation = await pool.query(
-      `
-      SELECT 1
-      FROM "FloFlo".parent_child
-      WHERE parent_id = $1
-      AND child_id = $2
-      LIMIT 1
-      `,
-      [parentId, Number(childId)],
+    const hasRelation = await checkParentChildRelation(
+      parentId,
+      Number(childId),
     );
 
-    if (relation.rows.length === 0) {
+    if (!hasRelation) {
       return res.status(403).json({
         message: "No tienes permiso para generar el reporte de este niño",
       });

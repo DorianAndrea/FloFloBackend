@@ -174,19 +174,16 @@ const getContactById = async (req, res) => {
 
 const createContact = async (req, res) => {
   try {
-    const { ownerId, isParentManagingChild } = await resolveContactOwnerId(req);
-
     const { name, relationship_type_id, where_met, memory_note } = req.body;
+
+    const relationshipTypeId = validatePositiveInteger(
+      relationship_type_id,
+      "Tipo de relación",
+    );
 
     if (!name || !String(name).trim()) {
       return res.status(400).json({
         message: "El nombre del contacto es obligatorio",
-      });
-    }
-
-    if (!relationship_type_id) {
-      return res.status(400).json({
-        message: "El tipo de relación es obligatorio",
       });
     }
 
@@ -198,7 +195,7 @@ const createContact = async (req, res) => {
       (
         user_id,
         name,
-        relationship_type_id,
+        relationshipTypeId,
         where_met,
         image,
         memory_note,
@@ -248,15 +245,14 @@ const updateContact = async (req, res) => {
 
     const { name, relationship_type_id, where_met, memory_note } = req.body;
 
+    const relationshipTypeId = validatePositiveInteger(
+      relationship_type_id,
+      "Tipo de relación",
+    );
+
     if (!name || !String(name).trim()) {
       return res.status(400).json({
         message: "El nombre del contacto es obligatorio",
-      });
-    }
-
-    if (!relationship_type_id) {
-      return res.status(400).json({
-        message: "El tipo de relación es obligatorio",
       });
     }
 
@@ -296,7 +292,7 @@ const updateContact = async (req, res) => {
       `,
       [
         String(name).trim(),
-        relationship_type_id,
+        relationshipTypeId,
         where_met || "",
         image,
         memory_note || "",
