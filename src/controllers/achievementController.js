@@ -79,7 +79,9 @@ const getAchievements = async (req, res) => {
     const { ownerId, isParentManagingChild } =
       await resolveAchievementOwnerId(req);
 
-    const achievements = await achievementService.getAchievementsByUser(ownerId);
+    await achievementService.checkAndUnlockAchievements(ownerId);
+
+const achievements = await achievementService.getAchievementsByUser(ownerId);
 
     res.json(
       achievements.map((achievement) => ({

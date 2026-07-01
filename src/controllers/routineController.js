@@ -124,13 +124,20 @@ const resolveRoutineOwnerId = async (req, client = pool) => {
   const loggedUserId = validatePositiveInteger(req.user.id, "Usuario");
   const childIdParam = req.params.childId;
 
-  if (!childIdParam) {
-    return {
-      ownerId: loggedUserId,
-      loggedUserId,
-      isParentManagingChild: false,
-    };
+ if (!childIdParam) {
+  if (req.user.role !== "child") {
+    throw createHttpError(
+      "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId",
+      403,
+    );
   }
+
+  return {
+    ownerId: loggedUserId,
+    loggedUserId,
+    isParentManagingChild: false,
+  };
+}
 
   const childId = validatePositiveInteger(childIdParam, "Niño/a");
 
@@ -239,8 +246,7 @@ const getTodayRoutines = async (req, res) => {
 const getRoutineHistory = async (req, res) => {
   try {
     const { ownerId, isParentManagingChild } = await resolveRoutineOwnerId(req);
-    const requestedLimit = Number(req.query.limit) || 50;
-    const limit = Math.min(Math.max(requestedLimit, 1), 100);
+    const limit = Math.min(Number(req.query.limit) || 50, 100);
 
     const result = await pool.query(
       `

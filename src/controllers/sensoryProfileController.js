@@ -44,6 +44,17 @@ const checkParentChildRelation = async (parentId, childId) => {
   return result.rows.length > 0;
 };
 
+const assertChildRole = (req) => {
+  if (req.user.role !== "child") {
+    const error = new Error(
+      "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId",
+    );
+
+    error.statusCode = 403;
+    throw error;
+  }
+};
+
 const getProfileByUserId = async (userId) => {
   const result = await pool.query(
     `
