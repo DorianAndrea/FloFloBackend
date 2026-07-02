@@ -163,6 +163,13 @@ const createContactConversation = async (req, res) => {
       reminder,
     } = req.body;
 
+    const finalContactId = validatePositiveInteger(
+      contact_id || contactId || user_contact_id || userContactId,
+      "Contacto",
+    );
+
+    const finalWhatToSay = what_to_say || whatToSay;
+
     if (
       !title ||
       !String(title).trim() ||
@@ -171,14 +178,6 @@ const createContactConversation = async (req, res) => {
       !finalWhatToSay ||
       !String(finalWhatToSay).trim()
     ) {
-      return res.status(400).json({
-        message: "contact_id, title, situation y what_to_say son obligatorios",
-      });
-    }
-
-    const finalWhatToSay = what_to_say || whatToSay;
-
-    if (!finalContactId || !title || !situation || !finalWhatToSay) {
       return res.status(400).json({
         message: "contact_id, title, situation y what_to_say son obligatorios",
       });
@@ -213,9 +212,9 @@ const createContactConversation = async (req, res) => {
       [
         ownerId,
         finalContactId,
-        title,
-        situation,
-        finalWhatToSay,
+        String(title).trim(),
+        String(situation).trim(),
+        String(finalWhatToSay).trim(),
         correct_answer || null,
         wrong_answer_1 || null,
         wrong_answer_2 || null,
@@ -237,7 +236,7 @@ const createContactConversation = async (req, res) => {
     console.error("Error creando conversación:", error);
 
     res.status(error.statusCode || 500).json({
-      message: error.message,
+      message: error.message || "Error creando conversación",
     });
   }
 };

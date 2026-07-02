@@ -180,6 +180,8 @@ const getContactById = async (req, res) => {
 
 const createContact = async (req, res) => {
   try {
+    const { ownerId, isParentManagingChild } = await resolveContactOwnerId(req);
+
     const { name, relationship_type_id, where_met, memory_note } = req.body;
 
     const relationshipTypeId = validatePositiveInteger(
@@ -201,7 +203,7 @@ const createContact = async (req, res) => {
       (
         user_id,
         name,
-        relationshipTypeId,
+        relationship_type_id,
         where_met,
         image,
         memory_note,
@@ -224,7 +226,7 @@ const createContact = async (req, res) => {
       [
         ownerId,
         String(name).trim(),
-        relationship_type_id,
+        relationshipTypeId,
         where_met || "",
         image,
         memory_note || "",
@@ -239,7 +241,7 @@ const createContact = async (req, res) => {
     console.error("Error creando contacto:", error);
 
     res.status(error.statusCode || 500).json({
-      message: error.message,
+      message: error.message || "Error creando contacto",
     });
   }
 };
