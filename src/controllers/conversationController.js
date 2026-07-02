@@ -298,7 +298,7 @@ const getConversations = async (req, res) => {
         ON ucc.user_contact_id = uc.id
         AND uc.user_id = ucc.user_id
       WHERE ucc.user_id = $1
-      ORDER BY ucc.created_at DESC
+      ORDER BY COALESCE(ucc.update_at, ucc.created_at) DESC
       `,
       [ownerId],
     );
@@ -561,18 +561,23 @@ const getPaginatedConversations = async (req, res) => {
     const order = req.query.order || "recientes";
     const offset = (page - 1) * limit;
 
-    let orderBy = "ucc.is_favorite DESC, ucc.created_at DESC";
+    let orderBy = "COALESCE(ucc.updated_at, ucc.created_at) DESC";
 
     if (order === "antiguos") {
-      orderBy = "ucc.is_favorite DESC, ucc.created_at ASC";
+      orderBy = "COALESCE(ucc.updated_at, ucc.created_at) ASC";
     }
 
     if (order === "az") {
-      orderBy = "ucc.is_favorite DESC, LOWER(ucc.title) ASC";
+      orderBy = "LOWER(ucc.title) ASC";
     }
 
     if (order === "za") {
-      orderBy = "ucc.is_favorite DESC, LOWER(ucc.title) DESC";
+      orderBy = "LOWER(ucc.title) DESC";
+    }
+
+    if (order === "favoritas") {
+      orderBy =
+        "COALESCE(ucc.is_favorite, false) DESC, COALESCE(ucc.updated_at, ucc.created_at) DESC";
     }
 
     const totalResult = await pool.query(
@@ -580,7 +585,8 @@ const getPaginatedConversations = async (req, res) => {
       SELECT COUNT(*) AS total
       FROM "FloFlo".user_contact_conversation ucc
       LEFT JOIN "FloFlo".user_contact uc
-      ON ucc.user_contact_id = uc.id
+        ON ucc.user_contact_id = uc.id
+        AND uc.user_id = ucc.user_id
       AND uc.user_id = ucc.user_id
       WHERE ucc.user_id = $1
       AND (

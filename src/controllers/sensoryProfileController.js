@@ -275,6 +275,104 @@ const getChildSensoryProfile = async (req, res) => {
   }
 };
 
+const upsertChildSensoryProfile = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const parentId = Number(req.user.id);
+    const { childId } = req.params;
+
+    if (req.user.role !== "parent") {
+      return res.status(403).json({
+        message: "Solo un padre o cuidador puede editar perfiles de hijos",
+      });
+    }
+
+    if (!isValidId(childId)) {
+      return res.status(400).json({
+        message: "ID de niño inválido",
+      });
+    }
+
+    const childIdNumber = Number(childId);
+
+    const hasRelation = await checkParentChildRelation(parentId, childIdNumber);
+
+    if (!hasRelation) {
+      return res.status(403).json({
+        message: "No tienes permiso para editar este perfil sensorial",
+      });
+    }
+
+    const data = sanitizeProfilePayload(req.body);
+
+    await client.query("BEGIN");
+
+    const result = await client.query(
+      `
+      INSERT INTO "FloFlo".sensory_profile (
+        user_id,
+        noise_sensitivity,
+        light_sensitivity,
+        texture_sensitivity,
+        crowd_sensitivity,
+        calming_items,
+        calming_activities,
+        stress_signals,
+        support_strategies,
+        notes,
+        created_at,
+        updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+      ON CONFLICT (user_id)
+      DO UPDATE SET
+        noise_sensitivity = EXCLUDED.noise_sensitivity,
+        light_sensitivity = EXCLUDED.light_sensitivity,
+        texture_sensitivity = EXCLUDED.texture_sensitivity,
+        crowd_sensitivity = EXCLUDED.crowd_sensitivity,
+        calming_items = EXCLUDED.calming_items,
+        calming_activities = EXCLUDED.calming_activities,
+        stress_signals = EXCLUDED.stress_signals,
+        support_strategies = EXCLUDED.support_strategies,
+        notes = EXCLUDED.notes,
+        updated_at = NOW()
+      RETURNING *
+      `,
+      [
+        childIdNumber,
+        data.noise_sensitivity,
+        data.light_sensitivity,
+        data.texture_sensitivity,
+        data.crowd_sensitivity,
+        data.calming_items,
+        data.calming_activities,
+        data.stress_signals,
+        data.support_strategies,
+        data.notes,
+      ],
+    );
+
+    const profile = result.rows[0];
+
+    await saveSensoryProfileHistory(client, profile, parentId);
+
+    await client.query("COMMIT");
+
+    res.status(200).json(profile);
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+
+    console.error("Error guardando perfil sensorial del niño:", error);
+
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error guardando perfil sensorial del niño",
+    });
+  } finally {
+    client.release();
+  }
+};
+
 const getMySensoryProfileHistory = async (req, res) => {
   try {
     assertChildRole(req);
@@ -336,6 +434,7 @@ module.exports = {
   getMySensoryProfile,
   upsertMySensoryProfile,
   getChildSensoryProfile,
+  upsertChildSensoryProfile,
   getMySensoryProfileHistory,
   getChildSensoryProfileHistory,
 };
