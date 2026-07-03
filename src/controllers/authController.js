@@ -27,6 +27,11 @@ const normalizeEmail = (email) => {
 const normalizeText = (value) => {
   return String(value || "").trim();
 };
+
+const isStrongPassword = (password) => {
+  return /^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(String(password || ""));
+};
+
 const createResetToken = () => {
   const rawToken = crypto.randomBytes(32).toString("hex");
 
@@ -69,9 +74,10 @@ const register = async (req, res) => {
       });
     }
 
-    if (cleanPassword.length < 6) {
+    if (!isStrongPassword(cleanPassword)) {
       return res.status(400).json({
-        message: "La contraseña debe tener al menos 6 caracteres",
+        message:
+          "La contraseña debe tener al menos 8 caracteres e incluir letras y números.",
       });
     }
 
@@ -338,6 +344,97 @@ const updateMe = async (req, res) => {
     });
   }
 };
+
+const changePassword = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { currentPassword, newPassword } = req.body || {};
+
+    const cleanCurrentPassword = String(currentPassword || "");
+    const cleanNewPassword = String(newPassword || "");
+
+    if (!cleanCurrentPassword || !cleanNewPassword) {
+      return res.status(400).json({
+        message: "La contraseña actual y la nueva contraseña son obligatorias.",
+      });
+    }
+
+    if (!isStrongPassword(cleanNewPassword)) {
+      return res.status(400).json({
+        message:
+          "La nueva contraseña debe tener al menos 8 caracteres e incluir letras y números.",
+      });
+    }
+
+    const userResult = await pool.query(
+      `
+      SELECT id, password
+      FROM "FloFlo"."user"
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [userId],
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        message: "Usuario no encontrado.",
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    if (!user.password || typeof user.password !== "string") {
+      return res.status(400).json({
+        message:
+          "Este usuario no tiene contraseña configurada. Debes restablecerla.",
+      });
+    }
+
+    const validPassword = await bcrypt.compare(
+      cleanCurrentPassword,
+      user.password,
+    );
+
+    if (!validPassword) {
+      return res.status(401).json({
+        message: "La contraseña actual no es correcta.",
+      });
+    }
+
+    const samePassword = await bcrypt.compare(cleanNewPassword, user.password);
+
+    if (samePassword) {
+      return res.status(400).json({
+        message: "La nueva contraseña debe ser distinta a la actual.",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(cleanNewPassword, 10);
+
+    await pool.query(
+      `
+      UPDATE "FloFlo"."user"
+      SET
+        password = $1,
+        updated_at = NOW()
+      WHERE id = $2
+      `,
+      [hashedPassword, userId],
+    );
+
+    res.json({
+      message: "Contraseña actualizada correctamente.",
+    });
+  } catch (error) {
+    console.error("Error cambiando contraseña:", error);
+
+    res.status(500).json({
+      message: "Error cambiando contraseña.",
+    });
+  }
+};
+
 const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body || {};
@@ -448,9 +545,10 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    if (cleanPassword.length < 6) {
+    if (!isStrongPassword(cleanPassword)) {
       return res.status(400).json({
-        message: "La nueva contraseña debe tener al menos 6 caracteres",
+        message:
+          "La nueva contraseña debe tener al menos 8 caracteres e incluir letras y números.",
       });
     }
 
@@ -553,4 +651,6 @@ module.exports = {
   updateMe,
   forgotPassword,
   resetPassword,
+  changePassword,
+  
 };
