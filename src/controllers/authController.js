@@ -29,7 +29,9 @@ const normalizeText = (value) => {
 };
 
 const isStrongPassword = (password) => {
-  return /^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(String(password || ""));
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(
+    String(password || ""),
+  );
 };
 
 const createResetToken = () => {
@@ -77,7 +79,7 @@ const register = async (req, res) => {
     if (!isStrongPassword(cleanPassword)) {
       return res.status(400).json({
         message:
-          "La contraseña debe tener al menos 8 caracteres e incluir letras y números.",
+          "La contraseña debe tener al menos 8 caracteres e incluir mayúscula, minúscula y número."
       });
     }
 
