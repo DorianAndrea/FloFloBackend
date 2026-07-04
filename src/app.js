@@ -18,6 +18,7 @@ const reportRoutes = require("./routes/reportRoutes");
 const parentDashboardRoutes = require("./routes/parentDashboardRoutes");
 const parentChildRoutes = require("./routes/parentChildRoutes");
 const sensoryProfileRoutes = require("./routes/sensoryProfileRoutes");
+const intelligentObservationRoutes = require("./routes/intelligentObservationRoutes");
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use("/api/report", reportRoutes);
 app.use("/api/parent-dashboard", parentDashboardRoutes);
 app.use("/api/parent-child", parentChildRoutes);
 app.use("/api/sensory-profile", sensoryProfileRoutes);
+app.use("/api/intelligent-observations", intelligentObservationRoutes);
 
 app.get("/", (req, res) => {
   res.send("Backend FloFlo funcionando");

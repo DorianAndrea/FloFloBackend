@@ -7,7 +7,6 @@ const isValidId = (id) => {
 
 const cleanText = (value) => {
   if (typeof value !== "string") return null;
-
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 };
@@ -18,6 +17,13 @@ const sanitizeProfilePayload = (body) => {
     light_sensitivity: cleanText(body.light_sensitivity),
     texture_sensitivity: cleanText(body.texture_sensitivity),
     crowd_sensitivity: cleanText(body.crowd_sensitivity),
+
+    touch_sensitivity: cleanText(body.touch_sensitivity),
+    smell_sensitivity: cleanText(body.smell_sensitivity),
+    food_sensitivity: cleanText(body.food_sensitivity),
+    unexpected_changes: cleanText(body.unexpected_changes),
+    waiting_sensitivity: cleanText(body.waiting_sensitivity),
+
     calming_items: cleanText(body.calming_items),
     calming_activities: cleanText(body.calming_activities),
     stress_signals: cleanText(body.stress_signals),
@@ -26,33 +32,31 @@ const sanitizeProfilePayload = (body) => {
   };
 };
 
+const assertChildRole = (req) => {
+  if (req.user.role !== "child") {
+    const error = new Error(
+      "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId"
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+};
+
 const checkParentChildRelation = async (parentId, childId) => {
   const result = await pool.query(
     `
     SELECT pc.child_id
     FROM "FloFlo".parent_child pc
-    INNER JOIN "FloFlo"."user" u
-      ON u.id = pc.child_id
+    INNER JOIN "FloFlo"."user" u ON u.id = pc.child_id
     WHERE pc.parent_id = $1
       AND pc.child_id = $2
       AND u.role = 'child'
     LIMIT 1
     `,
-    [parentId, childId],
+    [parentId, childId]
   );
 
   return result.rows.length > 0;
-};
-
-const assertChildRole = (req) => {
-  if (req.user.role !== "child") {
-    const error = new Error(
-      "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId",
-    );
-
-    error.statusCode = 403;
-    throw error;
-  }
 };
 
 const getProfileByUserId = async (userId) => {
@@ -63,7 +67,7 @@ const getProfileByUserId = async (userId) => {
     WHERE user_id = $1
     LIMIT 1
     `,
-    [userId],
+    [userId]
   );
 
   return result.rows[0] || null;
@@ -77,31 +81,54 @@ const saveSensoryProfileHistory = async (client, profile, createdBy) => {
     INSERT INTO "FloFlo".sensory_profile_history (
       user_id,
       created_by,
+
       noise_sensitivity,
       light_sensitivity,
       texture_sensitivity,
       crowd_sensitivity,
+
+      touch_sensitivity,
+      smell_sensitivity,
+      food_sensitivity,
+      unexpected_changes,
+      waiting_sensitivity,
+
       calming_items,
       calming_activities,
       stress_signals,
       support_strategies,
-      notes
+      notes,
+      created_at
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    VALUES (
+      $1, $2,
+      $3, $4, $5, $6,
+      $7, $8, $9, $10, $11,
+      $12, $13, $14, $15, $16,
+      NOW()
+    )
     `,
     [
       profile.user_id,
       createdBy,
+
       profile.noise_sensitivity,
       profile.light_sensitivity,
       profile.texture_sensitivity,
       profile.crowd_sensitivity,
+
+      profile.touch_sensitivity,
+      profile.smell_sensitivity,
+      profile.food_sensitivity,
+      profile.unexpected_changes,
+      profile.waiting_sensitivity,
+
       profile.calming_items,
       profile.calming_activities,
       profile.stress_signals,
       profile.support_strategies,
       profile.notes,
-    ],
+    ]
   );
 };
 
@@ -112,10 +139,18 @@ const getSensoryProfileHistoryByUserId = async (userId) => {
       id,
       user_id,
       created_by,
+
       noise_sensitivity,
       light_sensitivity,
       texture_sensitivity,
       crowd_sensitivity,
+
+      touch_sensitivity,
+      smell_sensitivity,
+      food_sensitivity,
+      unexpected_changes,
+      waiting_sensitivity,
+
       calming_items,
       calming_activities,
       stress_signals,
@@ -126,10 +161,91 @@ const getSensoryProfileHistoryByUserId = async (userId) => {
     WHERE user_id = $1
     ORDER BY created_at DESC
     `,
-    [userId],
+    [userId]
   );
 
   return result.rows;
+};
+
+const saveOrUpdateSensoryProfile = async (client, targetUserId, data) => {
+  const result = await client.query(
+    `
+    INSERT INTO "FloFlo".sensory_profile (
+      user_id,
+
+      noise_sensitivity,
+      light_sensitivity,
+      texture_sensitivity,
+      crowd_sensitivity,
+
+      touch_sensitivity,
+      smell_sensitivity,
+      food_sensitivity,
+      unexpected_changes,
+      waiting_sensitivity,
+
+      calming_items,
+      calming_activities,
+      stress_signals,
+      support_strategies,
+      notes,
+
+      created_at,
+      updated_at
+    )
+    VALUES (
+      $1,
+      $2, $3, $4, $5,
+      $6, $7, $8, $9, $10,
+      $11, $12, $13, $14, $15,
+      NOW(),
+      NOW()
+    )
+    ON CONFLICT (user_id)
+    DO UPDATE SET
+      noise_sensitivity = EXCLUDED.noise_sensitivity,
+      light_sensitivity = EXCLUDED.light_sensitivity,
+      texture_sensitivity = EXCLUDED.texture_sensitivity,
+      crowd_sensitivity = EXCLUDED.crowd_sensitivity,
+
+      touch_sensitivity = EXCLUDED.touch_sensitivity,
+      smell_sensitivity = EXCLUDED.smell_sensitivity,
+      food_sensitivity = EXCLUDED.food_sensitivity,
+      unexpected_changes = EXCLUDED.unexpected_changes,
+      waiting_sensitivity = EXCLUDED.waiting_sensitivity,
+
+      calming_items = EXCLUDED.calming_items,
+      calming_activities = EXCLUDED.calming_activities,
+      stress_signals = EXCLUDED.stress_signals,
+      support_strategies = EXCLUDED.support_strategies,
+      notes = EXCLUDED.notes,
+
+      updated_at = NOW()
+    RETURNING *
+    `,
+    [
+      targetUserId,
+
+      data.noise_sensitivity,
+      data.light_sensitivity,
+      data.texture_sensitivity,
+      data.crowd_sensitivity,
+
+      data.touch_sensitivity,
+      data.smell_sensitivity,
+      data.food_sensitivity,
+      data.unexpected_changes,
+      data.waiting_sensitivity,
+
+      data.calming_items,
+      data.calming_activities,
+      data.stress_signals,
+      data.support_strategies,
+      data.notes,
+    ]
+  );
+
+  return result.rows[0];
 };
 
 const getMySensoryProfile = async (req, res) => {
@@ -137,7 +253,6 @@ const getMySensoryProfile = async (req, res) => {
     assertChildRole(req);
 
     const userId = req.user.id;
-
     const profile = await getProfileByUserId(userId);
 
     res.json(profile);
@@ -145,7 +260,7 @@ const getMySensoryProfile = async (req, res) => {
     console.error("Error obteniendo perfil sensorial:", error);
 
     res.status(error.statusCode || 500).json({
-      message: error.message || "Error guardando perfil sensorial",
+      message: error.message || "Error obteniendo perfil sensorial",
     });
   }
 };
@@ -161,52 +276,7 @@ const upsertMySensoryProfile = async (req, res) => {
 
     await client.query("BEGIN");
 
-    const result = await client.query(
-      `
-      INSERT INTO "FloFlo".sensory_profile (
-        user_id,
-        noise_sensitivity,
-        light_sensitivity,
-        texture_sensitivity,
-        crowd_sensitivity,
-        calming_items,
-        calming_activities,
-        stress_signals,
-        support_strategies,
-        notes,
-        created_at,
-        updated_at
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
-      ON CONFLICT (user_id)
-      DO UPDATE SET
-        noise_sensitivity = EXCLUDED.noise_sensitivity,
-        light_sensitivity = EXCLUDED.light_sensitivity,
-        texture_sensitivity = EXCLUDED.texture_sensitivity,
-        crowd_sensitivity = EXCLUDED.crowd_sensitivity,
-        calming_items = EXCLUDED.calming_items,
-        calming_activities = EXCLUDED.calming_activities,
-        stress_signals = EXCLUDED.stress_signals,
-        support_strategies = EXCLUDED.support_strategies,
-        notes = EXCLUDED.notes,
-        updated_at = NOW()
-      RETURNING *
-      `,
-      [
-        userId,
-        data.noise_sensitivity,
-        data.light_sensitivity,
-        data.texture_sensitivity,
-        data.crowd_sensitivity,
-        data.calming_items,
-        data.calming_activities,
-        data.stress_signals,
-        data.support_strategies,
-        data.notes,
-      ],
-    );
-
-    const profile = result.rows[0];
+    const profile = await saveOrUpdateSensoryProfile(client, userId, data);
 
     await saveSensoryProfileHistory(client, profile, userId);
 
@@ -218,8 +288,8 @@ const upsertMySensoryProfile = async (req, res) => {
 
     console.error("Error guardando perfil sensorial:", error);
 
-    res.status(500).json({
-      message: "Error guardando perfil sensorial",
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error guardando perfil sensorial",
     });
   } finally {
     client.release();
@@ -236,16 +306,6 @@ const getChildSensoryProfile = async (req, res) => {
         message: "Solo un padre o cuidador puede ver perfiles de hijos",
       });
     }
-
-    const assertChildRole = (req) => {
-      if (req.user.role !== "child") {
-        const error = new Error(
-          "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId",
-        );
-        error.statusCode = 403;
-        throw error;
-      }
-    };
 
     if (!isValidId(childId)) {
       return res.status(400).json({
@@ -308,52 +368,11 @@ const upsertChildSensoryProfile = async (req, res) => {
 
     await client.query("BEGIN");
 
-    const result = await client.query(
-      `
-      INSERT INTO "FloFlo".sensory_profile (
-        user_id,
-        noise_sensitivity,
-        light_sensitivity,
-        texture_sensitivity,
-        crowd_sensitivity,
-        calming_items,
-        calming_activities,
-        stress_signals,
-        support_strategies,
-        notes,
-        created_at,
-        updated_at
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
-      ON CONFLICT (user_id)
-      DO UPDATE SET
-        noise_sensitivity = EXCLUDED.noise_sensitivity,
-        light_sensitivity = EXCLUDED.light_sensitivity,
-        texture_sensitivity = EXCLUDED.texture_sensitivity,
-        crowd_sensitivity = EXCLUDED.crowd_sensitivity,
-        calming_items = EXCLUDED.calming_items,
-        calming_activities = EXCLUDED.calming_activities,
-        stress_signals = EXCLUDED.stress_signals,
-        support_strategies = EXCLUDED.support_strategies,
-        notes = EXCLUDED.notes,
-        updated_at = NOW()
-      RETURNING *
-      `,
-      [
-        childIdNumber,
-        data.noise_sensitivity,
-        data.light_sensitivity,
-        data.texture_sensitivity,
-        data.crowd_sensitivity,
-        data.calming_items,
-        data.calming_activities,
-        data.stress_signals,
-        data.support_strategies,
-        data.notes,
-      ],
+    const profile = await saveOrUpdateSensoryProfile(
+      client,
+      childIdNumber,
+      data
     );
-
-    const profile = result.rows[0];
 
     await saveSensoryProfileHistory(client, profile, parentId);
 
@@ -378,7 +397,6 @@ const getMySensoryProfileHistory = async (req, res) => {
     assertChildRole(req);
 
     const userId = req.user.id;
-
     const history = await getSensoryProfileHistoryByUserId(userId);
 
     res.json(history);
