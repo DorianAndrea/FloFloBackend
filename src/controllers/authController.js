@@ -272,12 +272,10 @@ const updateMe = async (req, res) => {
   try {
     const user_id = req.user.id;
 
-    const { firstName, lastName, rut, birth_date, role } = req.body;
+    const { firstName, lastName, rut, birth_date } = req.body;
 
     const cleanFirstName = normalizeText(firstName);
     const cleanLastName = normalizeText(lastName);
-
-    const userRole = role === "parent" ? "parent" : "child";
 
     if (!cleanFirstName || !cleanLastName) {
       return res.status(400).json({
@@ -306,9 +304,8 @@ const updateMe = async (req, res) => {
         rut = $3,
         birth_date = $4,
         avatar = $5,
-        role = $6,
         updated_at = NOW()
-      WHERE id = $7
+      WHERE id = $6
       RETURNING
         id,
         "firstName",
@@ -326,7 +323,6 @@ const updateMe = async (req, res) => {
         rut || null,
         birth_date || null,
         avatar,
-        userRole,
         user_id,
       ],
     );
