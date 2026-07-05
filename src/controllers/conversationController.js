@@ -156,7 +156,7 @@ const getConversationFullData = async (
       orderNumber: message.order_number,
     })),
     exercise,
-    managed_by_parent: isParentManagingChild,
+    managed_by_parent: Boolean(conversation.managed_by_parent),
   };
 };
 
@@ -165,6 +165,7 @@ const createConversation = async (req, res) => {
 
   try {
     await client.query("BEGIN");
+    const managedByParent = Boolean(isParentManagingChild);
 
     const { ownerId, isParentManagingChild } = await resolveConversationOwnerId(
       req,
@@ -192,13 +193,21 @@ const createConversation = async (req, res) => {
         situation,
         what_to_say,
         reminder,
+        managed_by_parent,
         created_at,
         updated_at
       )
-      VALUES ($1,NULL,$2,$3,$4,$5,NOW(),NOW())
+      VALUES ($1, NULL, $2, $3, $4, $5, $6, NOW(), NOW())
       RETURNING *
       `,
-      [ownerId, title, situation, what_to_say || null, reminder || null],
+      [
+        ownerId,
+        title,
+        situation,
+        what_to_say || null,
+        reminder || null,
+        managedByParent,
+      ],
     );
 
     const conversation = conversationResult.rows[0];
@@ -259,13 +268,13 @@ const createConversation = async (req, res) => {
     await client.query("COMMIT");
 
     res.status(201).json({
-      message: isParentManagingChild
+      message: managedByParent
         ? "Conversación creada correctamente para el niño/a"
         : "Conversación creada correctamente",
-      managedByParent: isParentManagingChild,
+      managedByParent: Boolean(conversation.managed_by_parent),
       conversation: {
         ...conversation,
-        managed_by_parent: isParentManagingChild,
+        managed_by_parent: Boolean(conversation.managed_by_parent),
       },
     });
   } catch (error) {
@@ -659,8 +668,7 @@ const getPaginatedConversations = async (req, res) => {
 
 const toggleFavoriteConversation = async (req, res) => {
   try {
-    const { ownerId, isParentManagingChild } =
-      await resolveConversationOwnerId(req);
+    const { ownerId } = await resolveConversationOwnerId(req);
 
     const id = validatePositiveInteger(req.params.id, "Conversación");
 
@@ -690,8 +698,9 @@ const toggleFavoriteConversation = async (req, res) => {
   } catch (error) {
     console.error("Error actualizando favorito de conversación:", error);
 
-    res.status(error.statusCode || 500).json({
-      message: error.message,
+    res.json({
+      ...result.rows[0],
+      managed_by_parent: Boolean(result.rows[0].managed_by_parent),
     });
   }
 };
@@ -942,10 +951,12 @@ const updateConversation = async (req, res) => {
       message: isParentManagingChild
         ? "Conversación del niño/a actualizada correctamente"
         : "Conversación actualizada correctamente",
-      managedByParent: isParentManagingChild,
-      conversation: {
+        managedByParent: Boolean(updatedConversation.rows[0].managed_by_parent),
+        conversation: {
         ...updatedConversation.rows[0],
-        managed_by_parent: isParentManagingChild,
+        managed_by_parent: Boolean(
+          updatedConversation.rows[0].managed_by_parent,
+        ),
       },
     });
   } catch (error) {
