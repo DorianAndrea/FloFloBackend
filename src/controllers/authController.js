@@ -506,9 +506,7 @@ const forgotPassword = async (req, res) => {
       firstName: user.firstName,
       resetUrl,
     });
-
-    //console.log("PASSWORD RESET URL:", resetUrl);
-
+    
     const response = {
       ...genericResponse,
     };
