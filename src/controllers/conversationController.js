@@ -165,12 +165,13 @@ const createConversation = async (req, res) => {
 
   try {
     await client.query("BEGIN");
-    const managedByParent = Boolean(isParentManagingChild);
 
     const { ownerId, isParentManagingChild } = await resolveConversationOwnerId(
       req,
       client,
     );
+
+    const managedByParent = Boolean(isParentManagingChild);
 
     const { title, situation, what_to_say, reminder, messages, exercise } =
       req.body;
@@ -693,14 +694,13 @@ const toggleFavoriteConversation = async (req, res) => {
 
     res.json({
       ...result.rows[0],
-      managed_by_parent: isParentManagingChild,
+      managed_by_parent: Boolean(result.rows[0].managed_by_parent),
     });
   } catch (error) {
     console.error("Error actualizando favorito de conversación:", error);
 
-    res.json({
-      ...result.rows[0],
-      managed_by_parent: Boolean(result.rows[0].managed_by_parent),
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error actualizando favorito de conversación",
     });
   }
 };
@@ -951,8 +951,8 @@ const updateConversation = async (req, res) => {
       message: isParentManagingChild
         ? "Conversación del niño/a actualizada correctamente"
         : "Conversación actualizada correctamente",
-        managedByParent: Boolean(updatedConversation.rows[0].managed_by_parent),
-        conversation: {
+      managedByParent: Boolean(updatedConversation.rows[0].managed_by_parent),
+      conversation: {
         ...updatedConversation.rows[0],
         managed_by_parent: Boolean(
           updatedConversation.rows[0].managed_by_parent,
