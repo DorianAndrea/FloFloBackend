@@ -48,6 +48,13 @@ const resolvePlaceOwnerId = async (req, client = pool) => {
   const childIdParam = req.params.childId;
 
   if (!childIdParam) {
+    if (req.user.role !== "child") {
+      throw createHttpError(
+        "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId",
+        403,
+      );
+    }
+
     return {
       ownerId: loggedUserId,
       loggedUserId,
@@ -167,7 +174,7 @@ const createPlaceStep = async (req, res) => {
       });
     }
 
-    const image = req.file ? `/uploads/${req.file.filename}` : null;
+    const image = req.file ? req.file.path : null;
 
     const result = await pool.query(
       `

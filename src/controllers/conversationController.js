@@ -308,7 +308,7 @@ const getConversations = async (req, res) => {
         ON ucc.user_contact_id = uc.id
         AND uc.user_id = ucc.user_id
       WHERE ucc.user_id = $1
-      ORDER BY COALESCE(ucc.update_at, ucc.created_at) DESC
+      ORDER BY COALESCE(ucc.updated_at, ucc.created_at) DESC
       `,
       [ownerId],
     );
