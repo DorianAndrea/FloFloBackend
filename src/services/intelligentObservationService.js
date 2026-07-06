@@ -22,10 +22,12 @@ const validatePositiveInteger = (value, label) => {
 };
 
 const normalizePeriodDays = (value) => {
-  const days = Number(value) || 30;
+  const days = Number(value);
+  const allowedDays = [7, 30, 60, 90];
 
-  if (days < 7) return 7;
-  if (days > 90) return 90;
+  if (!allowedDays.includes(days)) {
+    return 30;
+  }
 
   return days;
 };
@@ -654,6 +656,10 @@ const generateAndSaveIntelligentObservation = async ({
   generatedBy,
 }) => {
   const cleanChildId = validatePositiveInteger(childId, "Niño/a");
+  const cleanGeneratedBy = validatePositiveInteger(
+    generatedBy,
+    "Padre/cuidador",
+  );
 
   const recentReport =
     await getRecentIntelligentObservationWithin24Hours(cleanChildId);
@@ -678,7 +684,7 @@ const generateAndSaveIntelligentObservation = async ({
 
   const saved = await saveIntelligentObservationReport({
     childId: generated.childId,
-    generatedBy,
+    generatedBy: cleanGeneratedBy,
     periodDays: generated.periodDays,
     dataSummary: generated.dataSummary,
     report: generated.report,

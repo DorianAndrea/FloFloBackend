@@ -35,7 +35,7 @@ const generatePlaceSteps = async (req, res) => {
     }
 
     const response = await client.chat.completions.create({
-      model: "gpt-4.1-mini",
+      model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
       messages: [
         {
           role: "system",
@@ -107,7 +107,7 @@ const generateConversation = async (req, res) => {
     }
 
     const response = await client.chat.completions.create({
-      model: "gpt-4.1-mini",
+      model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
       messages: [
         {
           role: "system",
@@ -193,7 +193,7 @@ const generateContactConversation = async (req, res) => {
     }
 
     const response = await client.chat.completions.create({
-      model: "gpt-4.1-mini",
+      model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
       messages: [
         {
           role: "system",

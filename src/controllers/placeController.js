@@ -54,7 +54,7 @@ const resolvePlaceOwnerId = async (req, client = pool) => {
   const loggedUserId = validatePositiveInteger(req.user.id, "Usuario");
   const childIdParam = req.params.childId;
 
-  if (!childIdParam) {
+ if (!childIdParam) {
   if (req.user.role !== "child") {
     throw createHttpError(
       "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId",
@@ -67,6 +67,7 @@ const resolvePlaceOwnerId = async (req, client = pool) => {
     isParentManagingChild: false,
   };
 }
+
 
   const childId = validatePositiveInteger(childIdParam, "Niño/a");
 

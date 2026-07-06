@@ -55,10 +55,22 @@ const changePasswordLimiter = rateLimit({
   },
 });
 
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  limit: 20,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: {
+    message:
+      "Has generado demasiadas sugerencias con IA. Espera unos minutos antes de volver a intentarlo.",
+  },
+});
+
 module.exports = {
   authLimiter,
   registerLimiter,
   forgotPasswordLimiter,
   resetPasswordLimiter,
   changePasswordLimiter,
+  aiLimiter,
 };

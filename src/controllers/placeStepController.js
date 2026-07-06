@@ -95,15 +95,7 @@ const validatePlaceOwnership = async (placeId, ownerId, client = pool) => {
 const getPlaceSteps = async (req, res) => {
   try {
     const { ownerId, isParentManagingChild } = await resolvePlaceOwnerId(req);
-    const { id } = req.params;
-
-    if (!isValidId(id)) {
-      return res.status(400).json({
-        message: "ID de lugar inválido",
-      });
-    }
-
-    const placeId = Number(id);
+    const placeId = validatePositiveInteger(req.params.id, "Lugar");
 
     const ownsPlace = await validatePlaceOwnership(placeId, ownerId);
 

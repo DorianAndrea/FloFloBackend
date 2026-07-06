@@ -180,6 +180,10 @@ const ioPdfFormatDate = (dateValue) => {
   });
 };
 
+const ioPdfGetCreatedAt = (report) => {
+  return report?.createdAt || report?.created_at || null;
+};
+
 const ioPdfEnsureSpace = (doc, neededHeight = 80) => {
   const bottomLimit = doc.page.height - doc.page.margins.bottom;
 
@@ -279,8 +283,7 @@ const ioPdfDrawMetadata = (doc, report) => {
       : "No registrado");
 
   doc.font("Helvetica").fontSize(11).fillColor("#4B5563");
-
-  doc.text(`Fecha: ${ioPdfFormatDate(report.createdAt)}`);
+  doc.text(`Fecha: ${ioPdfFormatDate(ioPdfGetCreatedAt(report))}`);
   doc.text(`Niño/a: ${childLabel}`);
   doc.text(`Generado por: ${generatedByLabel}`);
   doc.text(`Período analizado: últimos ${report.periodDays} días`);
@@ -487,8 +490,10 @@ const ioPdfBuildFileName = (report) => {
   const childName =
     report.childName?.trim() || `nino-${report.childId || "sin-id"}`;
 
-  const date = report.createdAt
-    ? new Date(report.createdAt).toISOString().slice(0, 10)
+  const createdAt = ioPdfGetCreatedAt(report);
+
+  const date = createdAt
+    ? new Date(createdAt).toISOString().slice(0, 10)
     : new Date().toISOString().slice(0, 10);
 
   return `informe-inteligente-${ioPdfSlugify(childName)}-${date}.pdf`;
@@ -542,7 +547,7 @@ const ioPdfDrawPageNumbers = (doc) => {
           width: width - 90,
           align: "left",
           lineBreak: false,
-        }
+        },
       );
 
     doc
@@ -561,7 +566,7 @@ const streamLatestReportPdf = ({ res, report }) => {
   const fileName = ioPdfBuildFileName(report);
 
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
 
   const doc = new PDFDocument({
     size: "A4",
@@ -619,7 +624,7 @@ const downloadLatestChildIntelligentObservationPdf = async (req, res) => {
         message: "No hay informes inteligentes guardados para este niño/a",
       });
     }
-  
+
     streamLatestReportPdf({ res, report });
   } catch (error) {
     console.error("Error generando PDF del informe inteligente:", error);

@@ -1,5 +1,6 @@
 const express = require("express");
 const authMiddleware = require("../middleware/authMiddleware");
+const { aiLimiter } = require("../middleware/rateLimiters");
 
 const {
   generateChildIntelligentObservation,
@@ -15,6 +16,7 @@ const router = express.Router();
 router.post(
   "/children/:childId/generate",
   authMiddleware,
+  aiLimiter,
   generateChildIntelligentObservation
 );
 
