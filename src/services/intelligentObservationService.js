@@ -250,7 +250,9 @@ const getContactConversations = async (childId, periodDays) => {
       uc.name AS contact_name,
       rt.relationship_name
     FROM "FloFlo".user_contact_conversation ucc
-    LEFT JOIN "FloFlo".user_contact uc ON uc.id = ucc.user_contact_id
+    LEFT JOIN "FloFlo".user_contact uc
+      ON uc.id = ucc.user_contact_id
+      AND uc.user_id = ucc.user_id
     LEFT JOIN "FloFlo".relationship_type rt ON rt.id = uc.relationship_type_id
     WHERE ucc.user_id = $1
       AND ucc.created_at >= NOW() - ($2::int * INTERVAL '1 day')
@@ -342,7 +344,7 @@ const buildDataSummary = (data) => {
 const buildPrompt = (data) => {
   const context = JSON.stringify(data, null, 2).slice(0, 26000);
 
- return `
+  return `
 Analiza la siguiente información registrada en FloFlo y genera un Informe Inteligente de Observaciones.
 
 IMPORTANTE:
@@ -630,14 +632,14 @@ const getRecentIntelligentObservationWithin24Hours = async (childId) => {
     ORDER BY created_at DESC
     LIMIT 1
     `,
-    [cleanChildId]
+    [cleanChildId],
   );
 
   if (!result.rows[0]) return null;
 
   const latestReport = result.rows[0];
   const nextAvailableAt = new Date(
-    new Date(latestReport.createdAt).getTime() + TWENTY_FOUR_HOURS_MS
+    new Date(latestReport.createdAt).getTime() + TWENTY_FOUR_HOURS_MS,
   );
 
   return {
@@ -658,7 +660,7 @@ const generateAndSaveIntelligentObservation = async ({
 
   if (recentReport) {
     const error = new Error(
-      "Ya existe un informe inteligente generado durante las últimas 24 horas para este niño/a. Podrás generar uno nuevo cuando se cumpla el plazo."
+      "Ya existe un informe inteligente generado durante las últimas 24 horas para este niño/a. Podrás generar uno nuevo cuando se cumpla el plazo.",
     );
 
     error.statusCode = 429;
@@ -671,7 +673,7 @@ const generateAndSaveIntelligentObservation = async ({
 
   const generated = await generateIntelligentObservation(
     cleanChildId,
-    periodDays
+    periodDays,
   );
 
   const saved = await saveIntelligentObservationReport({
@@ -720,7 +722,7 @@ const getLatestIntelligentObservation = async (childId) => {
     ORDER BY r.created_at DESC
     LIMIT 1
     `,
-    [cleanChildId]
+    [cleanChildId],
   );
 
   return result.rows[0] || null;
@@ -756,7 +758,7 @@ const getIntelligentObservationHistory = async (childId) => {
     ORDER BY r.created_at DESC
     LIMIT 20
     `,
-    [cleanChildId]
+    [cleanChildId],
   );
 
   return result.rows;
@@ -793,7 +795,7 @@ const getIntelligentObservationById = async ({ childId, reportId }) => {
       AND r.id = $2
     LIMIT 1
     `,
-    [cleanChildId, cleanReportId]
+    [cleanChildId, cleanReportId],
   );
 
   return result.rows[0] || null;

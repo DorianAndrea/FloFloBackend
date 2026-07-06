@@ -2,7 +2,6 @@ const express = require("express");
 const authMiddleware = require("../middleware/authMiddleware");
 
 const {
-  generateMyIntelligentObservation,
   generateChildIntelligentObservation,
   getLatestChildIntelligentObservation,
   getChildIntelligentObservationHistory,
@@ -12,8 +11,6 @@ const {
 } = require("../controllers/intelligentObservationController");
 
 const router = express.Router();
-
-router.post("/me/generate", authMiddleware, generateMyIntelligentObservation);
 
 router.post(
   "/children/:childId/generate",

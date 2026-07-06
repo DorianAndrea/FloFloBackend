@@ -1,21 +1,28 @@
 const { Resend } = require("resend");
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 const getEmailFrom = () => {
   return process.env.EMAIL_FROM || "FloFlo <onboarding@resend.dev>";
 };
 
-const sendPasswordResetEmail = async ({ to, firstName, resetUrl }) => {
-  // console.log("[emailService] Intentando enviar correo de recuperación a:", to);
-  // console.log("[emailService] EMAIL_FROM:", getEmailFrom());
-  // console.log(
-  //   "[emailService] RESEND_API_KEY configurada:",
-  //   Boolean(process.env.RESEND_API_KEY),
-  // );
+const escapeHtml = (value) => {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+};
 
-  if (!process.env.RESEND_API_KEY) {
-    console.log("[emailService] RESEND_API_KEY no configurada. Link:", resetUrl);
+const sendPasswordResetEmail = async ({ to, firstName, resetUrl }) => {
+  const resendApiKey = process.env.RESEND_API_KEY;
+
+  if (!resendApiKey) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("RESEND_API_KEY no está configurada");
+    }
+
+    console.log("[emailService] RESEND_API_KEY no configurada.");
+    console.log("[emailService] Link de recuperación local:", resetUrl);
 
     return {
       skipped: true,
@@ -23,7 +30,10 @@ const sendPasswordResetEmail = async ({ to, firstName, resetUrl }) => {
     };
   }
 
-  const displayName = firstName || "familia FloFlo";
+  const resend = new Resend(resendApiKey);
+
+  const displayName = escapeHtml(firstName || "familia FloFlo");
+  const safeResetUrl = escapeHtml(resetUrl);
 
   const { data, error } = await resend.emails.send({
     from: getEmailFrom(),
@@ -48,7 +58,7 @@ const sendPasswordResetEmail = async ({ to, firstName, resetUrl }) => {
 
           <div style="text-align: center; margin: 32px 0;">
             <a
-              href="${resetUrl}"
+              href="${safeResetUrl}"
               style="background-color: #9B7BE8; color: #ffffff; text-decoration: none; padding: 14px 24px; border-radius: 16px; font-weight: bold; display: inline-block;"
             >
               Crear nueva contraseña
@@ -71,11 +81,12 @@ const sendPasswordResetEmail = async ({ to, firstName, resetUrl }) => {
         </div>
       </div>
     `,
-    text: `Hola ${displayName}. Para recuperar tu contraseña de FloFlo, abre este enlace: ${resetUrl}. El enlace estará disponible por 30 minutos.`,
+    text: `Hola ${firstName || "familia FloFlo"}. Para recuperar tu contraseña de FloFlo, abre este enlace: ${resetUrl}. El enlace estará disponible por 30 minutos.`,
   });
 
   if (error) {
     console.error("[emailService] Error enviando correo Resend:", error);
+
     throw new Error("No fue posible enviar el correo de recuperación");
   }
 

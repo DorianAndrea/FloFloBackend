@@ -1431,29 +1431,6 @@ const buildReport = async (res, userId) => {
   doc.end();
 };
 
-const generateMyReport = async (req, res) => {
-  try {
-    if (req.user.role !== "child") {
-      return res.status(403).json({
-        message:
-          "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId",
-      });
-    }
-
-    const userId = req.user.id;
-
-    await buildReport(res, userId);
-  } catch (error) {
-    console.error("Error generando mi reporte:", error);
-
-    if (!res.headersSent) {
-      return res.status(error.statusCode || 500).json({
-        message: error.message || "Error al generar reporte PDF",
-      });
-    }
-  }
-};
-
 const generateChildReport = async (req, res) => {
   try {
     const parentId = req.user.id;
@@ -1495,6 +1472,5 @@ const generateChildReport = async (req, res) => {
 };
 
 module.exports = {
-  generateMyReport,
   generateChildReport,
 };

@@ -8,44 +8,6 @@ const {
   getIntelligentObservationById,
 } = require("../services/intelligentObservationService");
 
-const generateMyIntelligentObservation = async (req, res) => {
-  try {
-    if (req.user.role !== "child") {
-      return res.status(403).json({
-        message:
-          "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId/generate",
-      });
-    }
-
-    const childId = validatePositiveInteger(req.user.id, "Usuario");
-    const periodDays = req.query.periodDays || 30;
-
-    const result = await generateAndSaveIntelligentObservation({
-      childId,
-      periodDays,
-      generatedBy: childId,
-    });
-
-    res.json(result);
-  } catch (error) {
-    if (error.statusCode === 429) {
-      console.warn(
-        "Límite de generación de informe inteligente:",
-        error.message,
-      );
-    } else {
-      console.error("Error generando informe inteligente del niño:", error);
-    }
-
-    res.status(error.statusCode || 500).json({
-      message: error.message || "Error generando informe inteligente del niño",
-      latestReportId: error.latestReportId,
-      latestCreatedAt: error.latestCreatedAt,
-      nextAvailableAt: error.nextAvailableAt,
-    });
-  }
-};
-
 const generateChildIntelligentObservation = async (req, res) => {
   try {
     if (req.user.role !== "parent") {
@@ -545,58 +507,6 @@ const ioPdfDrawBrandMark = (doc, x, y) => {
     });
 };
 
-const ioPdfDrawPageNumbers = (doc) => {
-  const range = doc.bufferedPageRange();
-
-  for (let i = range.start; i < range.start + range.count; i += 1) {
-    doc.switchToPage(i);
-
-    const pageNumber = i - range.start + 1;
-    const totalPages = range.count;
-
-    const left = doc.page.margins.left;
-    const width =
-      doc.page.width - doc.page.margins.left - doc.page.margins.right;
-
-    // IMPORTANTE:
-    // Debe quedar dentro del área imprimible para que PDFKit no cree páginas extra.
-    const footerY = doc.page.height - doc.page.margins.bottom - 18;
-    const lineY = footerY - 10;
-
-    doc
-      .strokeColor("#E9DFFF")
-      .lineWidth(0.7)
-      .moveTo(left, lineY)
-      .lineTo(left + width, lineY)
-      .stroke();
-
-    doc
-      .font("Helvetica")
-      .fontSize(8)
-      .fillColor("#8B7AA8")
-      .text(
-        "FloFlo - Informe generado automáticamente a partir de registros de la plataforma.",
-        left,
-        footerY,
-        {
-          width: width - 90,
-          align: "left",
-          lineBreak: false,
-        },
-      );
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(8)
-      .fillColor("#4B367C")
-      .text(`Página ${pageNumber} de ${totalPages}`, left, footerY, {
-        width,
-        align: "right",
-        lineBreak: false,
-      });
-  }
-};
-
 const streamLatestReportPdf = ({ res, report }) => {
   const fileName = ioPdfBuildFileName(report);
 
@@ -787,7 +697,6 @@ const downloadChildIntelligentObservationPdfById = async (req, res) => {
 };
 
 module.exports = {
-  generateMyIntelligentObservation,
   generateChildIntelligentObservation,
   getLatestChildIntelligentObservation,
   getChildIntelligentObservationHistory,

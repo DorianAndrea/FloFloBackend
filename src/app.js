@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 
+
+
 const routineRoutes = require("./routes/routinesRoutes");
 const moodRoutes = require("./routes/moodRoutes");
 const authRoutes = require("./routes/authRoutes");
@@ -21,6 +23,8 @@ const sensoryProfileRoutes = require("./routes/sensoryProfileRoutes");
 const intelligentObservationRoutes = require("./routes/intelligentObservationRoutes");
 
 const app = express();
+
+app.set("trust proxy", 1);
 
 const allowedOrigins = [
   process.env.FRONTEND_URL,

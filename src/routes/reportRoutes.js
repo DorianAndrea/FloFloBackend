@@ -8,7 +8,6 @@ const {
   generateChildReport,
 } = require("../controllers/reportController");
 
-router.get("/me", authMiddleware, generateMyReport);
 router.get("/children/:childId", authMiddleware, generateChildReport);
 
 module.exports = router;
