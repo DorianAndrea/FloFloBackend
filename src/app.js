@@ -1,8 +1,6 @@
 const express = require("express");
 const cors = require("cors");
 
-
-
 const routineRoutes = require("./routes/routinesRoutes");
 const moodRoutes = require("./routes/moodRoutes");
 const authRoutes = require("./routes/authRoutes");
@@ -39,17 +37,19 @@ const allowedOrigins = [
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin) {
+      if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-
+      console.warn("Origen bloqueado por CORS:", origin);
       return callback(new Error(`Origen no permitido por CORS: ${origin}`));
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
 app.use(express.json());
