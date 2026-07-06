@@ -507,6 +507,56 @@ const ioPdfDrawBrandMark = (doc, x, y) => {
     });
 };
 
+const ioPdfDrawPageNumbers = (doc) => {
+  const range = doc.bufferedPageRange();
+
+  for (let i = range.start; i < range.start + range.count; i += 1) {
+    doc.switchToPage(i);
+
+    const pageNumber = i - range.start + 1;
+    const totalPages = range.count;
+
+    const left = doc.page.margins.left;
+    const width =
+      doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+    const footerY = doc.page.height - doc.page.margins.bottom - 18;
+    const lineY = footerY - 10;
+
+    doc
+      .strokeColor("#E9DFFF")
+      .lineWidth(0.7)
+      .moveTo(left, lineY)
+      .lineTo(left + width, lineY)
+      .stroke();
+
+    doc
+      .font("Helvetica")
+      .fontSize(8)
+      .fillColor("#8B7AA8")
+      .text(
+        "FloFlo - Informe generado automáticamente a partir de registros de la plataforma.",
+        left,
+        footerY,
+        {
+          width: width - 90,
+          align: "left",
+          lineBreak: false,
+        }
+      );
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(8)
+      .fillColor("#4B367C")
+      .text(`Página ${pageNumber} de ${totalPages}`, left, footerY, {
+        width,
+        align: "right",
+        lineBreak: false,
+      });
+  }
+};
+
 const streamLatestReportPdf = ({ res, report }) => {
   const fileName = ioPdfBuildFileName(report);
 
@@ -569,53 +619,7 @@ const downloadLatestChildIntelligentObservationPdf = async (req, res) => {
         message: "No hay informes inteligentes guardados para este niño/a",
       });
     }
-    const ioPdfDrawPageNumbers = (doc) => {
-      const range = doc.bufferedPageRange();
-
-      for (let i = range.start; i < range.start + range.count; i += 1) {
-        doc.switchToPage(i);
-
-        const pageNumber = i - range.start + 1;
-        const totalPages = range.count;
-
-        const left = doc.page.margins.left;
-        const width =
-          doc.page.width - doc.page.margins.left - doc.page.margins.right;
-
-        const footerY = doc.page.height - 38;
-
-        doc
-          .strokeColor("#E9DFFF")
-          .lineWidth(0.7)
-          .moveTo(left, footerY - 10)
-          .lineTo(left + width, footerY - 10)
-          .stroke();
-
-        doc
-          .font("Helvetica")
-          .fontSize(8)
-          .fillColor("#8B7AA8")
-          .text(
-            "FloFlo - Informe generado automáticamente a partir de registros de la plataforma.",
-            left,
-            footerY,
-            {
-              width: width - 90,
-              align: "left",
-            },
-          );
-
-        doc
-          .font("Helvetica-Bold")
-          .fontSize(8)
-          .fillColor("#4B367C")
-          .text(`Página ${pageNumber} de ${totalPages}`, left, footerY, {
-            width,
-            align: "right",
-          });
-      }
-    };
-
+  
     streamLatestReportPdf({ res, report });
   } catch (error) {
     console.error("Error generando PDF del informe inteligente:", error);
