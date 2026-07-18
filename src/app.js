@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-
+const multer = require("multer");
 const routineRoutes = require("./routes/routinesRoutes");
 const moodRoutes = require("./routes/moodRoutes");
 const authRoutes = require("./routes/authRoutes");
@@ -77,6 +77,35 @@ app.use("/api/intelligent-observations", intelligentObservationRoutes);
 
 app.get("/", (req, res) => {
   res.send("Backend FloFlo funcionando");
+});
+
+app.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({
+        message: "La imagen supera el máximo permitido de 10 MB.",
+      });
+    }
+
+    return res.status(400).json({
+      message: "No se pudo procesar la imagen.",
+    });
+  }
+
+  if (
+    error?.message ===
+    "Formato de imagen no permitido. Usa JPG, PNG o WEBP."
+  ) {
+    return res.status(400).json({
+      message: error.message,
+    });
+  }
+
+  console.error("Error no controlado:", error);
+
+  return res.status(500).json({
+    message: "Ocurrió un error interno en el servidor.",
+  });
 });
 
 module.exports = app;
