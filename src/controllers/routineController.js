@@ -98,99 +98,164 @@ const validatePositiveInteger = (value, label) => {
   return numberValue;
 };
 
-const assertParentCanAccessChild = async (parentId, childId, client = pool) => {
+const getAdultChildAccess = async (adultId, childId, client = pool) => {
   const result = await client.query(
     `
-    SELECT pc.child_id
+    SELECT
+      pc.child_id,
+      pc.relationship_key,
+      pc.access_profile,
+      pc.can_manage_team,
+      pc.status
+
     FROM "FloFlo".parent_child pc
-    INNER JOIN "FloFlo"."user" u
-      ON u.id = pc.child_id
+
+    INNER JOIN "FloFlo"."user" child
+      ON child.id = pc.child_id
+
     WHERE pc.parent_id = $1
-    AND pc.child_id = $2
-    AND u.role = 'child'
+      AND pc.child_id = $2
+      AND pc.status = 'active'
+      AND child.role = 'child'
+
     LIMIT 1
     `,
-    [parentId, childId],
+    [adultId, childId],
   );
 
   if (result.rows.length === 0) {
     throw createHttpError("No tienes permiso para acceder a este niño/a", 403);
   }
 
-  return true;
+  return result.rows[0];
+};
+
+const canCreateOrEditRoutine = (accessProfile) => {
+  return [
+    "primary_caregiver",
+    "caregiver",
+    "therapist",
+    "teacher",
+    "professional",
+  ].includes(accessProfile);
+};
+
+const canDeleteRoutine = (accessProfile) => {
+  return ["primary_caregiver", "caregiver"].includes(accessProfile);
 };
 
 const resolveRoutineOwnerId = async (req, client = pool) => {
   const loggedUserId = validatePositiveInteger(req.user.id, "Usuario");
+
   const childIdParam = req.params.childId;
 
- if (!childIdParam) {
-  if (req.user.role !== "child") {
-    throw createHttpError(
-      "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId",
-      403,
-    );
-  }
+  if (!childIdParam) {
+    if (req.user.role !== "child") {
+      throw createHttpError(
+        "Esta ruta es solo para cuentas de niño/a. Los adultos deben usar /children/:childId",
+        403,
+      );
+    }
 
-  return {
-    ownerId: loggedUserId,
-    loggedUserId,
-    isParentManagingChild: false,
-  };
-}
+    return {
+      ownerId: loggedUserId,
+      actorId: loggedUserId,
+      isAdultManagingChild: false,
+      source: "child",
+      accessProfile: "child",
+      relationshipKey: "child",
+    };
+  }
 
   const childId = validatePositiveInteger(childIdParam, "Niño/a");
 
   if (req.user.role !== "parent") {
-    throw createHttpError("Solo un padre/cuidador puede usar esta ruta", 403);
+    throw createHttpError("Solo una cuenta adulta puede usar esta ruta", 403);
   }
 
-  await assertParentCanAccessChild(loggedUserId, childId, client);
+  const access = await getAdultChildAccess(loggedUserId, childId, client);
 
   return {
     ownerId: childId,
-    loggedUserId,
-    isParentManagingChild: true,
+    actorId: loggedUserId,
+    isAdultManagingChild: true,
+    source: "parent",
+    accessProfile: access.access_profile,
+    relationshipKey: access.relationship_key,
+    canManageTeam: Boolean(access.can_manage_team),
   };
 };
 
 const getRoutines = async (req, res) => {
   try {
-    const { ownerId, isParentManagingChild } = await resolveRoutineOwnerId(req);
+    const { ownerId, isAdultManagingChild } = await resolveRoutineOwnerId(req);
+
     const { dateString } = getTodayInfo();
 
     const result = await pool.query(
       `
       SELECT
         r.*,
-        CASE 
+
+        creator."firstName" AS creator_first_name,
+        creator."lastName" AS creator_last_name,
+        creator.avatar AS creator_avatar,
+
+        updater."firstName" AS updater_first_name,
+        updater."lastName" AS updater_last_name,
+        updater.avatar AS updater_avatar,
+
+        CASE
           WHEN rp.id IS NULL THEN false
           ELSE true
         END AS completed_today,
+
         rp.completed_at AS today_completed_at,
-        rp.completion_date AS today_completion_date
+        rp.completion_date AS today_completion_date,
+
+        rp.completed_by AS today_completed_by,
+        rp.completer_access_profile AS today_completer_access_profile,
+        rp.completer_relationship_key AS today_completer_relationship_key,
+        rp.source AS today_completion_source,
+
+        completer."firstName" AS today_completer_first_name,
+        completer."lastName" AS today_completer_last_name,
+        completer.avatar AS today_completer_avatar
+
       FROM "FloFlo".routine r
+
       LEFT JOIN "FloFlo".routine_progress rp
         ON rp.routine_id = r.id
         AND rp.user_id = $1
         AND rp.completion_date = $2
+
+      LEFT JOIN "FloFlo"."user" creator
+        ON creator.id = r.created_by
+
+      LEFT JOIN "FloFlo"."user" updater
+        ON updater.id = r.updated_by
+
+      LEFT JOIN "FloFlo"."user" completer
+        ON completer.id = rp.completed_by
+
       WHERE r.user_id = $1
-      AND COALESCE(r.is_active, true) = true
+        AND COALESCE(r.is_active, true) = true
+
       ORDER BY r.start_time ASC, r.name ASC
       `,
       [ownerId, dateString],
     );
 
-    res.json(
+    return res.json(
       result.rows.map((routine) => ({
         ...routine,
-        managed_by_parent: isParentManagingChild,
+        managed_by_adult: isAdultManagingChild,
       })),
     );
   } catch (error) {
     console.error("Error obteniendo rutinas:", error);
 
-    res.status(error.statusCode || 500).json({
+    return res.status(error.statusCode || 500).json({
       message: error.message || "Error obteniendo rutinas",
     });
   }
@@ -198,46 +263,80 @@ const getRoutines = async (req, res) => {
 
 const getTodayRoutines = async (req, res) => {
   try {
-    const { ownerId, isParentManagingChild } = await resolveRoutineOwnerId(req);
+    const { ownerId, isAdultManagingChild } = await resolveRoutineOwnerId(req);
+
     const { dateString, dayKey } = getTodayInfo();
 
     const result = await pool.query(
       `
       SELECT
         r.*,
-        CASE 
+
+        creator."firstName" AS creator_first_name,
+        creator."lastName" AS creator_last_name,
+        creator.avatar AS creator_avatar,
+
+        updater."firstName" AS updater_first_name,
+        updater."lastName" AS updater_last_name,
+        updater.avatar AS updater_avatar,
+
+        CASE
           WHEN rp.id IS NULL THEN false
           ELSE true
         END AS completed_today,
+
         rp.completed_at AS today_completed_at,
-        rp.completion_date AS today_completion_date
+        rp.completion_date AS today_completion_date,
+
+        rp.completed_by AS today_completed_by,
+        rp.completer_access_profile AS today_completer_access_profile,
+        rp.completer_relationship_key AS today_completer_relationship_key,
+        rp.source AS today_completion_source,
+
+        completer."firstName" AS today_completer_first_name,
+        completer."lastName" AS today_completer_last_name,
+        completer.avatar AS today_completer_avatar
+
       FROM "FloFlo".routine r
+
       LEFT JOIN "FloFlo".routine_progress rp
         ON rp.routine_id = r.id
         AND rp.user_id = $1
         AND rp.completion_date = $2
+
+      LEFT JOIN "FloFlo"."user" creator
+        ON creator.id = r.created_by
+
+      LEFT JOIN "FloFlo"."user" updater
+        ON updater.id = r.updated_by
+
+      LEFT JOIN "FloFlo"."user" completer
+        ON completer.id = rp.completed_by
+
       WHERE r.user_id = $1
-      AND COALESCE(r.is_active, true) = true
-      AND $3 = ANY(r.days_of_week)
+        AND COALESCE(r.is_active, true) = true
+        AND $3 = ANY(r.days_of_week)
+
       ORDER BY r.start_time ASC, r.name ASC
       `,
       [ownerId, dateString, dayKey],
     );
 
-    res.json({
+    return res.json({
       date: dateString,
       day: dayKey,
       ownerId,
-      managedByParent: isParentManagingChild,
+      managedByAdult: isAdultManagingChild,
+
       routines: result.rows.map((routine) => ({
         ...routine,
-        managed_by_parent: isParentManagingChild,
+        managed_by_adult: isAdultManagingChild,
       })),
     });
   } catch (error) {
     console.error("Error obteniendo rutinas de hoy:", error);
 
-    res.status(error.statusCode || 500).json({
+    return res.status(error.statusCode || 500).json({
       message: error.message || "Error obteniendo rutinas de hoy",
     });
   }
@@ -245,39 +344,58 @@ const getTodayRoutines = async (req, res) => {
 
 const getRoutineHistory = async (req, res) => {
   try {
-    const { ownerId, isParentManagingChild } = await resolveRoutineOwnerId(req);
-    const limit = Math.min(Number(req.query.limit) || 50, 100);
+    const { ownerId, isAdultManagingChild } = await resolveRoutineOwnerId(req);
+
+    const requestedLimit = Number(req.query.limit);
+    const limit = Number.isInteger(requestedLimit)
+      ? Math.min(Math.max(requestedLimit, 1), 100)
+      : 50;
 
     const result = await pool.query(
       `
       SELECT
         rp.*,
+
         r.name,
         r.description,
         r.start_time,
         r.end_time,
-        r.days_of_week
+        r.days_of_week,
+
+        completer."firstName" AS completer_first_name,
+        completer."lastName" AS completer_last_name,
+        completer.avatar AS completer_avatar
+
       FROM "FloFlo".routine_progress rp
+
       INNER JOIN "FloFlo".routine r
-      ON r.id = rp.routine_id
-      AND r.user_id = rp.user_id
+        ON r.id = rp.routine_id
+        AND r.user_id = rp.user_id
+
+      LEFT JOIN "FloFlo"."user" completer
+        ON completer.id = rp.completed_by
+
       WHERE rp.user_id = $1
-      ORDER BY rp.completion_date DESC, rp.completed_at DESC
+
+      ORDER BY
+        rp.completion_date DESC,
+        rp.completed_at DESC
+
       LIMIT $2
       `,
       [ownerId, limit],
     );
 
-    res.json(
+    return res.json(
       result.rows.map((item) => ({
         ...item,
-        managed_by_parent: isParentManagingChild,
+        managed_by_adult: isAdultManagingChild,
       })),
     );
   } catch (error) {
     console.error("Error obteniendo historial de rutinas:", error);
 
-    res.status(error.statusCode || 500).json({
+    return res.status(error.statusCode || 500).json({
       message: error.message || "Error obteniendo historial de rutinas",
     });
   }
@@ -285,7 +403,20 @@ const getRoutineHistory = async (req, res) => {
 
 const createRoutine = async (req, res) => {
   try {
-    const { ownerId, isParentManagingChild } = await resolveRoutineOwnerId(req);
+    const {
+      ownerId,
+      actorId,
+      isAdultManagingChild,
+      accessProfile,
+      relationshipKey,
+    } = await resolveRoutineOwnerId(req);
+
+    if (isAdultManagingChild && !canCreateOrEditRoutine(accessProfile)) {
+      throw createHttpError(
+        "Tu perfil puede consultar las rutinas, pero no crear nuevas",
+        403,
+      );
+    }
 
     const {
       name,
@@ -303,11 +434,14 @@ const createRoutine = async (req, res) => {
     }
 
     const cleanName = String(name).trim();
+
     const cleanDescription =
       typeof description === "string" ? description.trim() : "";
+
     const cleanStartTime = String(start_time).trim();
     const cleanEndTime = String(end_time).trim();
-    const cleanDaysOfWeek = normalizeDaysOfWeek(days_of_week || daysOfWeek);
+
+    const cleanDaysOfWeek = normalizeDaysOfWeek(days_of_week ?? daysOfWeek);
 
     if (!cleanName || !cleanStartTime || !cleanEndTime) {
       return res.status(400).json({
@@ -331,10 +465,38 @@ const createRoutine = async (req, res) => {
         end_time,
         days_of_week,
         is_active,
+
+        created_by,
+        creator_access_profile,
+        creator_relationship_key,
+
+        updated_by,
+        updater_access_profile,
+        updater_relationship_key,
+
         created_at,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        true,
+
+        $7,
+        $8,
+        $9,
+
+        $7,
+        $8,
+        $9,
+
+        NOW(),
+        NOW()
+      )
       RETURNING *
       `,
       [
@@ -344,28 +506,50 @@ const createRoutine = async (req, res) => {
         cleanStartTime,
         cleanEndTime,
         cleanDaysOfWeek,
+
+        actorId,
+        accessProfile,
+        relationshipKey,
       ],
     );
 
-    res.status(201).json({
-      message: isParentManagingChild
+    return res.status(201).json({
+      message: isAdultManagingChild
         ? "Rutina creada correctamente para el niño/a"
         : "Rutina creada correctamente",
-      managedByParent: isParentManagingChild,
-      routine: result.rows[0],
+
+      managedByAdult: isAdultManagingChild,
+
+      routine: {
+        ...result.rows[0],
+        managed_by_adult: isAdultManagingChild,
+      },
     });
   } catch (error) {
     console.error("Error creando rutina:", error);
 
-    res.status(error.statusCode || 500).json({
-      message: error.message,
+    return res.status(error.statusCode || 500).json({
+      message: error.message || "Error creando rutina",
     });
   }
 };
 
 const updateRoutine = async (req, res) => {
   try {
-    const { ownerId, isParentManagingChild } = await resolveRoutineOwnerId(req);
+    const {
+      ownerId,
+      actorId,
+      isAdultManagingChild,
+      accessProfile,
+      relationshipKey,
+    } = await resolveRoutineOwnerId(req);
+
+    if (isAdultManagingChild && !canCreateOrEditRoutine(accessProfile)) {
+      throw createHttpError(
+        "Tu perfil puede consultar las rutinas, pero no modificarlas",
+        403,
+      );
+    }
     const id = validatePositiveInteger(req.params.id, "Rutina");
 
     const {
@@ -410,25 +594,37 @@ const updateRoutine = async (req, res) => {
 
     const result = await pool.query(
       `
-      UPDATE "FloFlo".routine
-      SET
-        name = $1,
-        description = $2,
-        start_time = $3,
-        end_time = $4,
-        days_of_week = COALESCE($5::TEXT[], days_of_week),
-        updated_at = NOW()
-      WHERE id = $6
-      AND user_id = $7
-      AND COALESCE(is_active, true) = true
-      RETURNING *
-      `,
+  UPDATE "FloFlo".routine
+  SET
+    name = $1,
+    description = $2,
+    start_time = $3,
+    end_time = $4,
+    days_of_week = COALESCE($5::TEXT[], days_of_week),
+
+    updated_by = $6,
+    updater_access_profile = $7,
+    updater_relationship_key = $8,
+
+    updated_at = NOW()
+
+  WHERE id = $9
+    AND user_id = $10
+    AND COALESCE(is_active, true) = true
+
+  RETURNING *
+  `,
       [
         cleanName,
         cleanDescription,
         cleanStartTime,
         cleanEndTime,
         cleanDaysOfWeek,
+
+        actorId,
+        accessProfile,
+        relationshipKey,
+
         id,
         ownerId,
       ],
@@ -442,7 +638,7 @@ const updateRoutine = async (req, res) => {
 
     res.json({
       ...result.rows[0],
-      managed_by_parent: isParentManagingChild,
+      managed_by_adult: isAdultManagingChild,
     });
   } catch (error) {
     console.error("Error actualizando rutina:", error);
@@ -455,7 +651,17 @@ const updateRoutine = async (req, res) => {
 
 const deleteRoutine = async (req, res) => {
   try {
-    const { ownerId, isParentManagingChild } = await resolveRoutineOwnerId(req);
+    const {
+      ownerId,
+      actorId,
+      isAdultManagingChild,
+      accessProfile,
+      relationshipKey,
+    } = await resolveRoutineOwnerId(req);
+
+    if (isAdultManagingChild && !canDeleteRoutine(accessProfile)) {
+      throw createHttpError("Solo un cuidador puede eliminar rutinas", 403);
+    }
     const id = validatePositiveInteger(req.params.id, "Rutina");
 
     const result = await pool.query(
@@ -463,13 +669,18 @@ const deleteRoutine = async (req, res) => {
       UPDATE "FloFlo".routine
       SET
         is_active = false,
+        updated_by = $1,
+        updater_access_profile = $2,
+        updater_relationship_key = $3,
         updated_at = NOW()
-      WHERE id = $1
-      AND user_id = $2
-      AND COALESCE(is_active, true) = true
+
+      WHERE id = $4
+        AND user_id = $5
+        AND COALESCE(is_active, true) = true
+
       RETURNING *
-      `,
-      [id, ownerId],
+  `,
+      [actorId, accessProfile, relationshipKey, id, ownerId],
     );
 
     if (result.rows.length === 0) {
@@ -478,11 +689,12 @@ const deleteRoutine = async (req, res) => {
       });
     }
 
-    res.json({
-      message: isParentManagingChild
+    return res.json({
+      message: isAdultManagingChild
         ? "Rutina del niño/a eliminada correctamente"
         : "Rutina eliminada correctamente",
-      managedByParent: isParentManagingChild,
+
+      managedByAdult: isAdultManagingChild,
       routine: result.rows[0],
     });
   } catch (error) {
@@ -498,15 +710,19 @@ const completeRoutine = async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const { ownerId, isParentManagingChild } = await resolveRoutineOwnerId(
-      req,
-      client,
-    );
+    await client.query("BEGIN");
+
+    const {
+      ownerId,
+      actorId,
+      isAdultManagingChild,
+      source,
+      accessProfile,
+      relationshipKey,
+    } = await resolveRoutineOwnerId(req, client);
 
     const id = validatePositiveInteger(req.params.id, "Rutina");
     const { dateString, dayKey } = getTodayInfo();
-
-    await client.query("BEGIN");
 
     const routineResult = await client.query(
       `
@@ -541,20 +757,38 @@ const completeRoutine = async (req, res) => {
 
     const insertedProgress = await client.query(
       `
-      INSERT INTO "FloFlo".routine_progress (
-        user_id,
-        routine_id,
-        completed,
-        points,
-        completed_at,
-        completion_date
-      )
-      VALUES ($1, $2, true, 1, NOW(), $3)
-      ON CONFLICT (user_id, routine_id, completion_date)
-      DO NOTHING
-      RETURNING *
-      `,
-      [ownerId, id, dateString],
+  INSERT INTO "FloFlo".routine_progress (
+    user_id,
+    routine_id,
+    completed,
+    points,
+    completed_at,
+    completion_date,
+
+    completed_by,
+    completer_access_profile,
+    completer_relationship_key,
+    source
+  )
+  VALUES (
+    $1, $2, true, 1, NOW(), $3,
+    $4, $5, $6, $7
+  )
+
+  ON CONFLICT (user_id, routine_id, completion_date)
+  DO NOTHING
+
+  RETURNING *
+  `,
+      [
+        ownerId,
+        id,
+        dateString,
+        actorId,
+        accessProfile,
+        relationshipKey,
+        source,
+      ],
     );
 
     let alreadyCompleted = false;
@@ -640,11 +874,12 @@ const completeRoutine = async (req, res) => {
     res.status(alreadyCompleted ? 200 : 201).json({
       message: alreadyCompleted
         ? "Rutina ya estaba completada hoy"
-        : isParentManagingChild
+        : isAdultManagingChild
           ? "Rutina del niño/a completada correctamente"
           : "Rutina completada correctamente",
+
       alreadyCompleted,
-      managedByParent: isParentManagingChild,
+      managedByAdult: isAdultManagingChild,
       ownerId,
       progress: progressRow,
       userProgress,

@@ -28,16 +28,26 @@ const validatePositiveInteger = (value, label) => {
   return numberValue;
 };
 
-const assertParentCanAccessChild = async (parentId, childId, client = pool) => {
+const getParentChildAccess = async (parentId, childId, client = pool) => {
   const result = await client.query(
     `
-    SELECT pc.child_id
+    SELECT
+      pc.child_id,
+      pc.relationship_key,
+      pc.access_profile,
+      pc.can_manage_team,
+      pc.status
+
     FROM "FloFlo".parent_child pc
+
     INNER JOIN "FloFlo"."user" u
       ON u.id = pc.child_id
+
     WHERE pc.parent_id = $1
-    AND pc.child_id = $2
-    AND u.role = 'child'
+      AND pc.child_id = $2
+      AND pc.status = 'active'
+      AND u.role = 'child'
+
     LIMIT 1
     `,
     [parentId, childId],
@@ -47,74 +57,92 @@ const assertParentCanAccessChild = async (parentId, childId, client = pool) => {
     throw createHttpError("No tienes permiso para acceder a este niño/a", 403);
   }
 
-  return true;
+  return result.rows[0];
 };
 
 const resolveMoodOwnerId = async (req, client = pool) => {
   const loggedUserId = validatePositiveInteger(req.user.id, "Usuario");
+
   const childIdParam = req.params.childId;
 
   if (!childIdParam) {
-  if (req.user.role !== "child") {
-    throw createHttpError(
-      "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId",
-      403,
-    );
-  }
+    if (req.user.role !== "child") {
+      throw createHttpError(
+        "Esta ruta es solo para cuentas de niño/a. Los adultos deben usar /children/:childId",
+        403,
+      );
+    }
 
-  return {
-    ownerId: loggedUserId,
-    actorId: loggedUserId,
-    isParentManagingChild: false,
-    source: "child",
-  };
-}
+    return {
+      ownerId: loggedUserId,
+      actorId: loggedUserId,
+      isAdultManagingChild: false,
+      source: "child",
+      creatorAccessProfile: "child",
+      creatorRelationshipKey: "child",
+    };
+  }
 
   const childId = validatePositiveInteger(childIdParam, "Niño/a");
 
   if (req.user.role !== "parent") {
-    throw createHttpError("Solo un padre/cuidador puede usar esta ruta", 403);
+    throw createHttpError("Solo una cuenta adulta puede usar esta ruta", 403);
   }
 
-  await assertParentCanAccessChild(loggedUserId, childId, client);
+  const access = await getParentChildAccess(loggedUserId, childId, client);
 
   return {
     ownerId: childId,
     actorId: loggedUserId,
-    isParentManagingChild: true,
+    isAdultManagingChild: true,
     source: "parent",
+    creatorAccessProfile: access.access_profile,
+    creatorRelationshipKey: access.relationship_key,
   };
 };
 
 const getMoods = async (req, res) => {
   try {
-    const { ownerId, isParentManagingChild } = await resolveMoodOwnerId(req);
+    const { ownerId, isAdultManagingChild } = await resolveMoodOwnerId(req);
 
     const result = await pool.query(
       `
-      SELECT 
-        m.id,
-        m.user_id,
-        m.created_by,
-        m.source,
-        m.mood_type_id,
-        mt.mood_name,
-        mt.icon,
-        m.comment,
-        m.created_at
-      FROM "FloFlo".mood m
-      INNER JOIN "FloFlo".mood_type mt 
-        ON m.mood_type_id = mt.id
-      WHERE m.user_id = $1
-      ORDER BY m.created_at DESC
-      `,
+  SELECT
+    m.id,
+    m.user_id,
+    m.created_by,
+    m.source,
+    m.creator_access_profile,
+    m.creator_relationship_key,
+    m.mood_type_id,
+    mt.mood_name,
+    mt.icon,
+    m.comment,
+    m.created_at,
+
+    creator."firstName" AS creator_first_name,
+    creator."lastName" AS creator_last_name,
+    creator.avatar AS creator_avatar
+
+  FROM "FloFlo".mood m
+
+  INNER JOIN "FloFlo".mood_type mt
+    ON m.mood_type_id = mt.id
+
+  LEFT JOIN "FloFlo"."user" creator
+    ON creator.id = m.created_by
+
+  WHERE m.user_id = $1
+
+  ORDER BY m.created_at DESC
+  `,
       [ownerId],
     );
 
     res.json(
       result.rows.map((mood) => ({
         ...mood,
-        managed_by_parent: isParentManagingChild,
+        managed_by_adult: isAdultManagingChild,
       })),
     );
   } catch (error) {
@@ -133,8 +161,14 @@ const createMood = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const { ownerId, actorId, isParentManagingChild, source } =
-      await resolveMoodOwnerId(req, client);
+    const {
+      ownerId,
+      actorId,
+      isAdultManagingChild,
+      source,
+      creatorAccessProfile,
+      creatorRelationshipKey,
+    } = await resolveMoodOwnerId(req, client);
 
     const { mood_type_id, comment } = req.body;
 
@@ -146,10 +180,7 @@ const createMood = async (req, res) => {
       });
     }
 
-    const moodTypeId = validatePositiveInteger(
-      mood_type_id,
-      "Tipo de emoción",
-    );
+    const moodTypeId = validatePositiveInteger(mood_type_id, "Tipo de emoción");
 
     const moodTypeExists = await client.query(
       `
@@ -171,18 +202,29 @@ const createMood = async (req, res) => {
 
     const result = await client.query(
       `
-      INSERT INTO "FloFlo".mood (
-        user_id,
-        created_by,
+  INSERT INTO "FloFlo".mood (
+    user_id,
+    created_by,
+    source,
+    creator_access_profile,
+    creator_relationship_key,
+    mood_type_id,
+    comment,
+    created_at
+  )
+  VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+
+  RETURNING *
+  `,
+      [
+        ownerId,
+        actorId,
         source,
-        mood_type_id,
-        comment,
-        created_at
-      )
-      VALUES ($1, $2, $3, $4, $5, NOW())
-      RETURNING *
-      `,
-      [ownerId, actorId, source, moodTypeId, comment || null],
+        creatorAccessProfile,
+        creatorRelationshipKey,
+        moodTypeId,
+        comment || null,
+      ],
     );
 
     const mood = result.rows[0];
@@ -194,7 +236,7 @@ const createMood = async (req, res) => {
         pero NO suma puntos ni logros, porque no fue una acción realizada por el niño.
     */
 
-    if (!isParentManagingChild) {
+    if (!isAdultManagingChild) {
       const currentProgress = await client.query(
         `
         SELECT * 
@@ -245,19 +287,22 @@ const createMood = async (req, res) => {
     await client.query("COMMIT");
     committed = true;
 
-    const unlockedAchievements = isParentManagingChild
+    const unlockedAchievements = isAdultManagingChild
       ? []
       : await checkAndUnlockAchievements(ownerId);
 
     res.status(201).json({
-      message: isParentManagingChild
+      message: isAdultManagingChild
         ? "Observación emocional guardada para el niño/a"
         : "Estado de ánimo guardado",
-      managedByParent: isParentManagingChild,
+
+      managedByAdult: isAdultManagingChild,
+
       mood: {
         ...mood,
-        managed_by_parent: isParentManagingChild,
+        managed_by_adult: isAdultManagingChild,
       },
+
       unlockedAchievements,
     });
   } catch (error) {

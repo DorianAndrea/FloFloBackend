@@ -26,59 +26,77 @@ const validatePositiveInteger = (value, label) => {
   return numberValue;
 };
 
-const assertParentCanAccessChild = async (parentId, childId, client = pool) => {
+const getAdultChildAccess = async (adultId, childId, client = pool) => {
   const result = await client.query(
     `
-    SELECT pc.child_id
+    SELECT
+      pc.child_id,
+      pc.relationship_key,
+      pc.access_profile,
+      pc.can_manage_team,
+      pc.status
     FROM "FloFlo".parent_child pc
-    INNER JOIN "FloFlo"."user" u
-      ON u.id = pc.child_id
+
+    INNER JOIN "FloFlo"."user" child
+      ON child.id = pc.child_id
+
     WHERE pc.parent_id = $1
-    AND pc.child_id = $2
-    AND u.role = 'child'
+      AND pc.child_id = $2
+      AND pc.status = 'active'
+      AND child.role = 'child'
+
     LIMIT 1
     `,
-    [parentId, childId],
+    [adultId, childId],
   );
 
   if (result.rows.length === 0) {
     throw createHttpError("No tienes permiso para acceder a este niño/a", 403);
   }
 
-  return true;
+  return result.rows[0];
 };
 
 const resolveConversationOwnerId = async (req, client = pool) => {
   const loggedUserId = validatePositiveInteger(req.user.id, "Usuario");
+
   const childIdParam = req.params.childId;
 
   if (!childIdParam) {
     if (req.user.role !== "child") {
       throw createHttpError(
-        "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId",
+        "Esta ruta es solo para cuentas de niño/a. Las cuentas adultas deben usar /children/:childId",
         403,
       );
     }
 
     return {
       ownerId: loggedUserId,
+      actorId: loggedUserId,
       loggedUserId,
       isParentManagingChild: false,
+      accessProfile: "child",
+      relationshipKey: "child",
+      canManageTeam: false,
     };
   }
 
   const childId = validatePositiveInteger(childIdParam, "Niño/a");
 
   if (req.user.role !== "parent") {
-    throw createHttpError("Solo un padre/cuidador puede usar esta ruta", 403);
+    throw createHttpError("Solo una cuenta adulta puede usar esta ruta", 403);
   }
 
-  await assertParentCanAccessChild(loggedUserId, childId, client);
+  const access = await getAdultChildAccess(loggedUserId, childId, client);
 
   return {
     ownerId: childId,
+    actorId: loggedUserId,
     loggedUserId,
     isParentManagingChild: true,
+    accessProfile: access.access_profile,
+    relationshipKey: access.relationship_key,
+    canManageTeam: Boolean(access.can_manage_team),
   };
 };
 
@@ -139,6 +157,19 @@ const getConversationFullData = async (
     tipo: isContact ? "contacto" : "normal",
     user_id: conversation.user_id,
     user_contact_id: conversation.user_contact_id,
+
+    created_by: conversation.created_by || null,
+    creator_access_profile: conversation.creator_access_profile || null,
+    creator_relationship_key: conversation.creator_relationship_key || null,
+    creator_first_name: conversation.creator_first_name || null,
+    creator_last_name: conversation.creator_last_name || null,
+
+    updated_by: conversation.updated_by || null,
+    updater_access_profile: conversation.updater_access_profile || null,
+    updater_relationship_key: conversation.updater_relationship_key || null,
+    updater_first_name: conversation.updater_first_name || null,
+    updater_last_name: conversation.updater_last_name || null,
+
     is_favorite: Boolean(conversation.is_favorite),
     contact_name: conversation.contact_name || null,
     contact_image: conversation.contact_image || null,
@@ -166,10 +197,13 @@ const createConversation = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const { ownerId, isParentManagingChild } = await resolveConversationOwnerId(
-      req,
-      client,
-    );
+    const {
+      ownerId,
+      actorId,
+      isParentManagingChild,
+      accessProfile,
+      relationshipKey,
+    } = await resolveConversationOwnerId(req, client);
 
     const managedByParent = Boolean(isParentManagingChild);
 
@@ -195,19 +229,52 @@ const createConversation = async (req, res) => {
         what_to_say,
         reminder,
         managed_by_parent,
+
+        created_by,
+        creator_access_profile,
+        creator_relationship_key,
+
+        updated_by,
+        updater_access_profile,
+        updater_relationship_key,
+
         created_at,
         updated_at
       )
-      VALUES ($1, NULL, $2, $3, $4, $5, $6, NOW(), NOW())
+      VALUES
+      (
+        $1,
+        NULL,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+
+        $7,
+        $8,
+        $9,
+
+        $7,
+        $8,
+        $9,
+
+        NOW(),
+        NOW()
+      )
       RETURNING *
-      `,
+  `,
       [
         ownerId,
-        title,
-        situation,
+        String(title).trim(),
+        String(situation).trim(),
         what_to_say || null,
         reminder || null,
         managedByParent,
+
+        actorId,
+        accessProfile,
+        relationshipKey,
       ],
     );
 
@@ -298,18 +365,38 @@ const getConversations = async (req, res) => {
 
     const conversationsResult = await pool.query(
       `
-      SELECT
-        ucc.*,
-        COALESCE(ucc.is_favorite, false) AS is_favorite,
-        uc.name AS contact_name,
-        uc.image AS contact_image
-      FROM "FloFlo".user_contact_conversation ucc
-      LEFT JOIN "FloFlo".user_contact uc
-        ON ucc.user_contact_id = uc.id
-        AND uc.user_id = ucc.user_id
-      WHERE ucc.user_id = $1
-      ORDER BY COALESCE(ucc.updated_at, ucc.created_at) DESC
-      `,
+  SELECT
+    ucc.*,
+    COALESCE(ucc.is_favorite, false) AS is_favorite,
+
+    uc.name AS contact_name,
+    uc.image AS contact_image,
+
+    creator."firstName" AS creator_first_name,
+    creator."lastName" AS creator_last_name,
+
+    updater."firstName" AS updater_first_name,
+    updater."lastName" AS updater_last_name
+
+  FROM "FloFlo".user_contact_conversation ucc
+
+  LEFT JOIN "FloFlo".user_contact uc
+    ON ucc.user_contact_id = uc.id
+    AND uc.user_id = ucc.user_id
+
+  LEFT JOIN "FloFlo"."user" creator
+    ON creator.id = ucc.created_by
+
+  LEFT JOIN "FloFlo"."user" updater
+    ON updater.id = ucc.updated_by
+
+  WHERE ucc.user_id = $1
+
+  ORDER BY COALESCE(
+    ucc.updated_at,
+    ucc.created_at
+  ) DESC
+  `,
       [ownerId],
     );
 
@@ -349,7 +436,7 @@ const completeConversation = async (req, res) => {
       SELECT id
       FROM "FloFlo".user_contact_conversation
       WHERE id = $1
-      AND user_id = $2
+        AND user_id = $2
       LIMIT 1
       `,
       [id, ownerId],
@@ -368,7 +455,7 @@ const completeConversation = async (req, res) => {
       SELECT *
       FROM "FloFlo".conversation_progress
       WHERE user_id = $1
-      AND conversation_id = $2
+        AND conversation_id = $2
       LIMIT 1
       `,
       [ownerId, id],
@@ -395,7 +482,7 @@ const completeConversation = async (req, res) => {
         points,
         completed_at
       )
-      VALUES ($1,$2,true,1,NOW())
+      VALUES ($1, $2, true, 1, NOW())
       RETURNING *
       `,
       [ownerId, id],
@@ -416,6 +503,7 @@ const completeConversation = async (req, res) => {
 
     if (currentProgress.rows.length > 0) {
       newPoints = Number(currentProgress.rows[0].points || 0) + 1;
+
       newLevel = calculateLevel(newPoints);
 
       await client.query(
@@ -424,7 +512,8 @@ const completeConversation = async (req, res) => {
         SET
           points = $1,
           level = $2,
-          completed_conversations = COALESCE(completed_conversations, 0) + 1,
+          completed_conversations =
+            COALESCE(completed_conversations, 0) + 1,
           updated_at = NOW()
         WHERE user_id = $3
         `,
@@ -444,7 +533,7 @@ const completeConversation = async (req, res) => {
           completed_moods,
           updated_at
         )
-        VALUES ($1,$2,$3,1,0,0,0,NOW())
+        VALUES ($1, $2, $3, 1, 0, 0, 0, NOW())
         `,
         [ownerId, 1, 1],
       );
@@ -455,7 +544,7 @@ const completeConversation = async (req, res) => {
       SELECT COUNT(*) AS count
       FROM "FloFlo".conversation_progress
       WHERE user_id = $1
-      AND completed = true
+        AND completed = true
       `,
       [ownerId],
     );
@@ -505,10 +594,11 @@ const completeConversation = async (req, res) => {
 
     await client.query("COMMIT");
 
-    res.status(201).json({
+    return res.status(201).json({
       message: isParentManagingChild
         ? "Conversación del niño/a completada"
         : "Conversación completada",
+
       managedByParent: isParentManagingChild,
       progress: result.rows[0],
       unlockedAchievements,
@@ -518,8 +608,8 @@ const completeConversation = async (req, res) => {
 
     console.error("Error completando conversación:", error);
 
-    res.status(error.statusCode || 500).json({
-      message: error.message,
+    return res.status(error.statusCode || 500).json({
+      message: error.message || "Error completando conversación",
     });
   } finally {
     client.release();
@@ -617,27 +707,69 @@ const getPaginatedConversations = async (req, res) => {
 
     const result = await pool.query(
       `
-      SELECT
-        ucc.*,
-        COALESCE(ucc.is_favorite, false) AS is_favorite,
-        uc.name AS contact_name,
-        uc.image AS contact_image
-      FROM "FloFlo".user_contact_conversation ucc
-      LEFT JOIN "FloFlo".user_contact uc
-        ON ucc.user_contact_id = uc.id
-      WHERE ucc.user_id = $1
-      AND (
-        $4 = ''
-        OR translate(LOWER(ucc.title), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
-          LIKE translate(LOWER('%' || $4 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
-        OR translate(LOWER(ucc.situation), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
-          LIKE translate(LOWER('%' || $4 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
-        OR translate(LOWER(COALESCE(uc.name, '')), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
-          LIKE translate(LOWER('%' || $4 || '%'), 'áéíóúÁÉÍÓÚñÑ', 'aeiouaeiounn')
+  SELECT
+    ucc.*,
+    COALESCE(ucc.is_favorite, false) AS is_favorite,
+
+    uc.name AS contact_name,
+    uc.image AS contact_image,
+
+    creator."firstName" AS creator_first_name,
+    creator."lastName" AS creator_last_name,
+
+    updater."firstName" AS updater_first_name,
+    updater."lastName" AS updater_last_name
+
+  FROM "FloFlo".user_contact_conversation ucc
+
+  LEFT JOIN "FloFlo".user_contact uc
+    ON ucc.user_contact_id = uc.id
+    AND uc.user_id = ucc.user_id
+
+  LEFT JOIN "FloFlo"."user" creator
+    ON creator.id = ucc.created_by
+
+  LEFT JOIN "FloFlo"."user" updater
+    ON updater.id = ucc.updated_by
+
+  WHERE ucc.user_id = $1
+    AND (
+      $4 = ''
+
+      OR translate(
+        LOWER(ucc.title),
+        'áéíóúÁÉÍÓÚñÑ',
+        'aeiouaeiounn'
+      ) LIKE translate(
+        LOWER('%' || $4 || '%'),
+        'áéíóúÁÉÍÓÚñÑ',
+        'aeiouaeiounn'
       )
-      ORDER BY ${orderBy}
-      LIMIT $2 OFFSET $3
-      `,
+
+      OR translate(
+        LOWER(ucc.situation),
+        'áéíóúÁÉÍÓÚñÑ',
+        'aeiouaeiounn'
+      ) LIKE translate(
+        LOWER('%' || $4 || '%'),
+        'áéíóúÁÉÍÓÚñÑ',
+        'aeiouaeiounn'
+      )
+
+      OR translate(
+        LOWER(COALESCE(uc.name, '')),
+        'áéíóúÁÉÍÓÚñÑ',
+        'aeiouaeiounn'
+      ) LIKE translate(
+        LOWER('%' || $4 || '%'),
+        'áéíóúÁÉÍÓÚñÑ',
+        'aeiouaeiounn'
+      )
+    )
+
+  ORDER BY ${orderBy}
+  LIMIT $2 OFFSET $3
+  `,
       [ownerId, limit, offset, search],
     );
 
@@ -711,10 +843,20 @@ const deleteConversation = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const { ownerId, isParentManagingChild } = await resolveConversationOwnerId(
-      req,
-      client,
-    );
+    const { ownerId, isParentManagingChild, canManageTeam } =
+      await resolveConversationOwnerId(req, client);
+
+    /*
+     * Solo el administrador del grupo puede eliminar.
+     * El niño/a, terapeutas, profesores, familiares y otros
+     * perfiles no administradores reciben 403.
+     */
+    if (!isParentManagingChild || !canManageTeam) {
+      throw createHttpError(
+        "Solo el administrador del grupo puede eliminar conversaciones",
+        403,
+      );
+    }
 
     const id = validatePositiveInteger(req.params.id, "Conversación");
 
@@ -723,7 +865,8 @@ const deleteConversation = async (req, res) => {
       SELECT id
       FROM "FloFlo".user_contact_conversation
       WHERE id = $1
-      AND user_id = $2
+        AND user_id = $2
+      LIMIT 1
       `,
       [id, ownerId],
     );
@@ -740,7 +883,7 @@ const deleteConversation = async (req, res) => {
       `
       DELETE FROM "FloFlo".user_contact_conversation_progress
       WHERE contact_conversation_id = $1
-      AND user_id = $2
+        AND user_id = $2
       `,
       [id, ownerId],
     );
@@ -749,7 +892,7 @@ const deleteConversation = async (req, res) => {
       `
       DELETE FROM "FloFlo".conversation_progress
       WHERE conversation_id = $1
-      AND user_id = $2
+        AND user_id = $2
       `,
       [id, ownerId],
     );
@@ -786,7 +929,7 @@ const deleteConversation = async (req, res) => {
       `
       DELETE FROM "FloFlo".user_contact_conversation
       WHERE id = $1
-      AND user_id = $2
+        AND user_id = $2
       RETURNING *
       `,
       [id, ownerId],
@@ -794,11 +937,11 @@ const deleteConversation = async (req, res) => {
 
     await client.query("COMMIT");
 
-    res.json({
-      message: isParentManagingChild
-        ? "Conversación del niño/a eliminada correctamente"
-        : "Conversación eliminada correctamente",
-      managedByParent: isParentManagingChild,
+    return res.json({
+      message: "Conversación del niño/a eliminada correctamente",
+      managedByParent: true,
+      managedByAdult: true,
+      canManageTeam: true,
       conversation: deleted.rows[0],
     });
   } catch (error) {
@@ -806,8 +949,8 @@ const deleteConversation = async (req, res) => {
 
     console.error("Error eliminando conversación:", error);
 
-    res.status(error.statusCode || 500).json({
-      message: error.message,
+    return res.status(error.statusCode || 500).json({
+      message: error.message || "Error eliminando conversación",
     });
   } finally {
     client.release();
@@ -820,10 +963,13 @@ const updateConversation = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const { ownerId, isParentManagingChild } = await resolveConversationOwnerId(
-      req,
-      client,
-    );
+    const {
+      ownerId,
+      actorId,
+      isParentManagingChild,
+      accessProfile,
+      relationshipKey,
+    } = await resolveConversationOwnerId(req, client);
 
     const id = validatePositiveInteger(req.params.id, "Conversación");
 
@@ -850,18 +996,38 @@ const updateConversation = async (req, res) => {
 
     const updatedConversation = await client.query(
       `
-      UPDATE "FloFlo".user_contact_conversation
-      SET
-        title = $1,
-        situation = $2,
-        what_to_say = $3,
-        reminder = $4,
-        updated_at = NOW()
-      WHERE id = $5
-      AND user_id = $6
-      RETURNING *
-      `,
-      [title, situation, what_to_say || null, reminder || null, id, ownerId],
+  UPDATE "FloFlo".user_contact_conversation
+
+  SET
+    title = $1,
+    situation = $2,
+    what_to_say = $3,
+    reminder = $4,
+
+    updated_by = $5,
+    updater_access_profile = $6,
+    updater_relationship_key = $7,
+
+    updated_at = NOW()
+
+  WHERE id = $8
+    AND user_id = $9
+
+  RETURNING *
+  `,
+      [
+        String(title || "").trim(),
+        String(situation || "").trim(),
+        what_to_say || null,
+        reminder || null,
+
+        actorId,
+        accessProfile,
+        relationshipKey,
+
+        id,
+        ownerId,
+      ],
     );
 
     await client.query(

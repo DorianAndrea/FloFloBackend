@@ -1,86 +1,223 @@
 const pool = require("../database/db");
 
-const isValidId = (id) => {
-  const numberId = Number(id);
-  return Number.isInteger(numberId) && numberId > 0;
+const createHttpError = (message, statusCode = 400) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
+const validatePositiveInteger = (value, label) => {
+  const numberValue = Number(value);
+
+  if (!Number.isInteger(numberValue) || numberValue <= 0) {
+    throw createHttpError(`${label} inválido`, 400);
+  }
+
+  return numberValue;
 };
 
 const cleanText = (value) => {
   if (typeof value !== "string") return null;
+
   const trimmed = value.trim();
+
   return trimmed.length > 0 ? trimmed : null;
 };
 
-const sanitizeProfilePayload = (body) => {
+const sanitizeProfilePayload = (body) => ({
+  noise_sensitivity: cleanText(body.noise_sensitivity),
+  light_sensitivity: cleanText(body.light_sensitivity),
+  texture_sensitivity: cleanText(body.texture_sensitivity),
+  crowd_sensitivity: cleanText(body.crowd_sensitivity),
+
+  touch_sensitivity: cleanText(body.touch_sensitivity),
+  smell_sensitivity: cleanText(body.smell_sensitivity),
+  food_sensitivity: cleanText(body.food_sensitivity),
+  unexpected_changes: cleanText(body.unexpected_changes),
+  waiting_sensitivity: cleanText(body.waiting_sensitivity),
+
+  calming_items: cleanText(body.calming_items),
+  calming_activities: cleanText(body.calming_activities),
+  stress_signals: cleanText(body.stress_signals),
+  support_strategies: cleanText(body.support_strategies),
+  notes: cleanText(body.notes),
+});
+
+/*
+ * Obtiene la relación activa entre una cuenta adulta y el niño/a.
+ *
+ * Todos los perfiles asociados pueden ver y editar el perfil sensorial.
+ * En este módulo no se exige can_manage_team.
+ */
+const getAdultChildAccess = async (
+  adultId,
+  childId,
+  client = pool,
+) => {
+  const result = await client.query(
+    `
+    SELECT
+      pc.child_id,
+      pc.relationship_key,
+      pc.access_profile,
+      pc.can_manage_team,
+      pc.status
+    FROM "FloFlo".parent_child pc
+
+    INNER JOIN "FloFlo"."user" child
+      ON child.id = pc.child_id
+
+    WHERE pc.parent_id = $1
+      AND pc.child_id = $2
+      AND pc.status = 'active'
+      AND child.role = 'child'
+
+    LIMIT 1
+    `,
+    [adultId, childId],
+  );
+
+  if (result.rows.length === 0) {
+    throw createHttpError(
+      "No tienes permiso para acceder al perfil sensorial de este niño/a",
+      403,
+    );
+  }
+
+  return result.rows[0];
+};
+
+/*
+ * Determina:
+ *
+ * ownerId: niño/a al que pertenece el perfil sensorial.
+ * actorId: usuario que está realizando la acción.
+ * accessProfile: categoría general de acceso.
+ * relationshipKey: perfil específico del integrante.
+ */
+const resolveSensoryProfileAccess = async (
+  req,
+  client = pool,
+) => {
+  const loggedUserId = validatePositiveInteger(
+    req.user.id,
+    "Usuario",
+  );
+
+  const childIdParam = req.params.childId;
+
+  /*
+   * Ruta utilizada por el propio niño/a.
+   */
+  if (!childIdParam) {
+    if (req.user.role !== "child") {
+      throw createHttpError(
+        "Esta ruta es solo para cuentas de niño/a. Las cuentas adultas deben usar /children/:childId",
+        403,
+      );
+    }
+
+    return {
+      ownerId: loggedUserId,
+      actorId: loggedUserId,
+      isAdultManagingChild: false,
+      accessProfile: "child",
+      relationshipKey: "child",
+      canManageTeam: false,
+    };
+  }
+
+  /*
+   * Ruta utilizada por una cuenta adulta asociada.
+   */
+  const childId = validatePositiveInteger(
+    childIdParam,
+    "Niño/a",
+  );
+
+  if (req.user.role !== "parent") {
+    throw createHttpError(
+      "Solo una cuenta adulta asociada puede utilizar esta ruta",
+      403,
+    );
+  }
+
+  const access = await getAdultChildAccess(
+    loggedUserId,
+    childId,
+    client,
+  );
+
   return {
-    noise_sensitivity: cleanText(body.noise_sensitivity),
-    light_sensitivity: cleanText(body.light_sensitivity),
-    texture_sensitivity: cleanText(body.texture_sensitivity),
-    crowd_sensitivity: cleanText(body.crowd_sensitivity),
-
-    touch_sensitivity: cleanText(body.touch_sensitivity),
-    smell_sensitivity: cleanText(body.smell_sensitivity),
-    food_sensitivity: cleanText(body.food_sensitivity),
-    unexpected_changes: cleanText(body.unexpected_changes),
-    waiting_sensitivity: cleanText(body.waiting_sensitivity),
-
-    calming_items: cleanText(body.calming_items),
-    calming_activities: cleanText(body.calming_activities),
-    stress_signals: cleanText(body.stress_signals),
-    support_strategies: cleanText(body.support_strategies),
-    notes: cleanText(body.notes),
+    ownerId: childId,
+    actorId: loggedUserId,
+    isAdultManagingChild: true,
+    accessProfile: access.access_profile,
+    relationshipKey: access.relationship_key,
+    canManageTeam: Boolean(access.can_manage_team),
   };
 };
 
-const assertChildRole = (req) => {
-  if (req.user.role !== "child") {
-    const error = new Error(
-      "Esta ruta es solo para cuentas de niño/a. Los cuidadores deben usar /children/:childId"
-    );
-    error.statusCode = 403;
-    throw error;
-  }
-};
-
-const checkParentChildRelation = async (parentId, childId) => {
-  const result = await pool.query(
+/*
+ * Obtiene el perfil sensorial actual y los datos de autoría.
+ */
+const getProfileByUserId = async (
+  userId,
+  client = pool,
+) => {
+  const result = await client.query(
     `
-    SELECT pc.child_id
-    FROM "FloFlo".parent_child pc
-    INNER JOIN "FloFlo"."user" u ON u.id = pc.child_id
-    WHERE pc.parent_id = $1
-      AND pc.child_id = $2
-      AND u.role = 'child'
+    SELECT
+      sp.*,
+
+      creator."firstName" AS creator_first_name,
+      creator."lastName" AS creator_last_name,
+      creator.avatar AS creator_avatar,
+
+      updater."firstName" AS updater_first_name,
+      updater."lastName" AS updater_last_name,
+      updater.avatar AS updater_avatar
+
+    FROM "FloFlo".sensory_profile sp
+
+    LEFT JOIN "FloFlo"."user" creator
+      ON creator.id = sp.created_by
+
+    LEFT JOIN "FloFlo"."user" updater
+      ON updater.id = sp.updated_by
+
+    WHERE sp.user_id = $1
+
     LIMIT 1
     `,
-    [parentId, childId]
-  );
-
-  return result.rows.length > 0;
-};
-
-const getProfileByUserId = async (userId) => {
-  const result = await pool.query(
-    `
-    SELECT *
-    FROM "FloFlo".sensory_profile
-    WHERE user_id = $1
-    LIMIT 1
-    `,
-    [userId]
+    [userId],
   );
 
   return result.rows[0] || null;
 };
 
-const saveSensoryProfileHistory = async (client, profile, createdBy) => {
+/*
+ * Guarda una versión completa dentro del historial.
+ *
+ * created_by representa a quien realizó ese guardado.
+ */
+const saveSensoryProfileHistory = async (
+  client,
+  profile,
+  actorId,
+  accessProfile,
+  relationshipKey,
+) => {
   if (!profile) return;
 
   await client.query(
     `
-    INSERT INTO "FloFlo".sensory_profile_history (
+    INSERT INTO "FloFlo".sensory_profile_history
+    (
       user_id,
       created_by,
+      creator_access_profile,
+      creator_relationship_key,
 
       noise_sensitivity,
       light_sensitivity,
@@ -98,19 +235,41 @@ const saveSensoryProfileHistory = async (client, profile, createdBy) => {
       stress_signals,
       support_strategies,
       notes,
+
       created_at
     )
-    VALUES (
-      $1, $2,
-      $3, $4, $5, $6,
-      $7, $8, $9, $10, $11,
-      $12, $13, $14, $15, $16,
+    VALUES
+    (
+      $1,
+      $2,
+      $3,
+      $4,
+
+      $5,
+      $6,
+      $7,
+      $8,
+
+      $9,
+      $10,
+      $11,
+      $12,
+      $13,
+
+      $14,
+      $15,
+      $16,
+      $17,
+      $18,
+
       NOW()
     )
     `,
     [
       profile.user_id,
-      createdBy,
+      actorId,
+      accessProfile,
+      relationshipKey,
 
       profile.noise_sensitivity,
       profile.light_sensitivity,
@@ -128,49 +287,85 @@ const saveSensoryProfileHistory = async (client, profile, createdBy) => {
       profile.stress_signals,
       profile.support_strategies,
       profile.notes,
-    ]
+    ],
   );
 };
 
-const getSensoryProfileHistoryByUserId = async (userId) => {
-  const result = await pool.query(
+/*
+ * Obtiene el historial completo y el nombre de quien guardó cada versión.
+ */
+const getSensoryProfileHistoryByUserId = async (
+  userId,
+  client = pool,
+) => {
+  const result = await client.query(
     `
     SELECT
-      id,
-      user_id,
-      created_by,
+      sph.id,
+      sph.user_id,
+      sph.created_by,
+      sph.creator_access_profile,
+      sph.creator_relationship_key,
 
-      noise_sensitivity,
-      light_sensitivity,
-      texture_sensitivity,
-      crowd_sensitivity,
+      sph.noise_sensitivity,
+      sph.light_sensitivity,
+      sph.texture_sensitivity,
+      sph.crowd_sensitivity,
 
-      touch_sensitivity,
-      smell_sensitivity,
-      food_sensitivity,
-      unexpected_changes,
-      waiting_sensitivity,
+      sph.touch_sensitivity,
+      sph.smell_sensitivity,
+      sph.food_sensitivity,
+      sph.unexpected_changes,
+      sph.waiting_sensitivity,
 
-      calming_items,
-      calming_activities,
-      stress_signals,
-      support_strategies,
-      notes,
-      created_at
-    FROM "FloFlo".sensory_profile_history
-    WHERE user_id = $1
-    ORDER BY created_at DESC
+      sph.calming_items,
+      sph.calming_activities,
+      sph.stress_signals,
+      sph.support_strategies,
+      sph.notes,
+      sph.created_at,
+
+      creator."firstName" AS creator_first_name,
+      creator."lastName" AS creator_last_name,
+      creator.avatar AS creator_avatar
+
+    FROM "FloFlo".sensory_profile_history sph
+
+    LEFT JOIN "FloFlo"."user" creator
+      ON creator.id = sph.created_by
+
+    WHERE sph.user_id = $1
+
+    ORDER BY sph.created_at DESC
     `,
-    [userId]
+    [userId],
   );
 
   return result.rows;
 };
 
-const saveOrUpdateSensoryProfile = async (client, targetUserId, data) => {
+/*
+ * Crea o actualiza el perfil sensorial.
+ *
+ * Si el perfil ya existía:
+ * - conserva el creador original;
+ * - registra quién realizó la última actualización.
+ *
+ * Si es un perfil antiguo sin autor:
+ * - completa los campos del creador con la primera persona que lo actualice.
+ */
+const saveOrUpdateSensoryProfile = async (
+  client,
+  targetUserId,
+  data,
+  actorId,
+  accessProfile,
+  relationshipKey,
+) => {
   const result = await client.query(
     `
-    INSERT INTO "FloFlo".sensory_profile (
+    INSERT INTO "FloFlo".sensory_profile AS sp
+    (
       user_id,
 
       noise_sensitivity,
@@ -190,17 +385,50 @@ const saveOrUpdateSensoryProfile = async (client, targetUserId, data) => {
       support_strategies,
       notes,
 
+      created_by,
+      creator_access_profile,
+      creator_relationship_key,
+
+      updated_by,
+      updater_access_profile,
+      updater_relationship_key,
+
       created_at,
       updated_at
     )
-    VALUES (
+    VALUES
+    (
       $1,
-      $2, $3, $4, $5,
-      $6, $7, $8, $9, $10,
-      $11, $12, $13, $14, $15,
+
+      $2,
+      $3,
+      $4,
+      $5,
+
+      $6,
+      $7,
+      $8,
+      $9,
+      $10,
+
+      $11,
+      $12,
+      $13,
+      $14,
+      $15,
+
+      $16,
+      $17,
+      $18,
+
+      $16,
+      $17,
+      $18,
+
       NOW(),
       NOW()
     )
+
     ON CONFLICT (user_id)
     DO UPDATE SET
       noise_sensitivity = EXCLUDED.noise_sensitivity,
@@ -220,7 +448,29 @@ const saveOrUpdateSensoryProfile = async (client, targetUserId, data) => {
       support_strategies = EXCLUDED.support_strategies,
       notes = EXCLUDED.notes,
 
+      created_by = COALESCE(
+        sp.created_by,
+        EXCLUDED.created_by
+      ),
+
+      creator_access_profile = COALESCE(
+        sp.creator_access_profile,
+        EXCLUDED.creator_access_profile
+      ),
+
+      creator_relationship_key = COALESCE(
+        sp.creator_relationship_key,
+        EXCLUDED.creator_relationship_key
+      ),
+
+      updated_by = EXCLUDED.updated_by,
+      updater_access_profile =
+        EXCLUDED.updater_access_profile,
+      updater_relationship_key =
+        EXCLUDED.updater_relationship_key,
+
       updated_at = NOW()
+
     RETURNING *
     `,
     [
@@ -242,208 +492,277 @@ const saveOrUpdateSensoryProfile = async (client, targetUserId, data) => {
       data.stress_signals,
       data.support_strategies,
       data.notes,
-    ]
+
+      actorId,
+      accessProfile,
+      relationshipKey,
+    ],
   );
 
   return result.rows[0];
 };
 
+/*
+ * Obtener el perfil sensorial propio.
+ */
 const getMySensoryProfile = async (req, res) => {
   try {
-    assertChildRole(req);
+    const {
+      ownerId,
+    } = await resolveSensoryProfileAccess(req);
 
-    const userId = req.user.id;
-    const profile = await getProfileByUserId(userId);
+    const profile = await getProfileByUserId(ownerId);
 
-    res.json(profile);
+    return res.json(profile);
   } catch (error) {
-    console.error("Error obteniendo perfil sensorial:", error);
+    console.error(
+      "Error obteniendo perfil sensorial:",
+      error,
+    );
 
-    res.status(error.statusCode || 500).json({
-      message: error.message || "Error obteniendo perfil sensorial",
+    return res.status(error.statusCode || 500).json({
+      message:
+        error.message ||
+        "Error obteniendo perfil sensorial",
     });
   }
 };
 
+/*
+ * Crear o actualizar el perfil sensorial propio.
+ */
 const upsertMySensoryProfile = async (req, res) => {
   const client = await pool.connect();
 
   try {
-    assertChildRole(req);
-
-    const userId = req.user.id;
-    const data = sanitizeProfilePayload(req.body);
-
     await client.query("BEGIN");
 
-    const profile = await saveOrUpdateSensoryProfile(client, userId, data);
+    const {
+      ownerId,
+      actorId,
+      accessProfile,
+      relationshipKey,
+    } = await resolveSensoryProfileAccess(
+      req,
+      client,
+    );
 
-    await saveSensoryProfileHistory(client, profile, userId);
+    const data = sanitizeProfilePayload(req.body);
+
+    const savedProfile =
+      await saveOrUpdateSensoryProfile(
+        client,
+        ownerId,
+        data,
+        actorId,
+        accessProfile,
+        relationshipKey,
+      );
+
+    await saveSensoryProfileHistory(
+      client,
+      savedProfile,
+      actorId,
+      accessProfile,
+      relationshipKey,
+    );
+
+    const completeProfile =
+      await getProfileByUserId(
+        ownerId,
+        client,
+      );
 
     await client.query("COMMIT");
 
-    res.status(200).json(profile);
+    return res.status(200).json(
+      completeProfile,
+    );
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => {});
+    await client
+      .query("ROLLBACK")
+      .catch(() => {});
 
-    console.error("Error guardando perfil sensorial:", error);
+    console.error(
+      "Error guardando perfil sensorial:",
+      error,
+    );
 
-    res.status(error.statusCode || 500).json({
-      message: error.message || "Error guardando perfil sensorial",
+    return res.status(error.statusCode || 500).json({
+      message:
+        error.message ||
+        "Error guardando perfil sensorial",
     });
   } finally {
     client.release();
   }
 };
 
+/*
+ * Obtener el perfil sensorial de un niño/a asociado.
+ *
+ * Puede hacerlo cualquier integrante adulto con una relación activa.
+ */
 const getChildSensoryProfile = async (req, res) => {
   try {
-    const parentId = req.user.id;
-    const { childId } = req.params;
+    const {
+      ownerId,
+    } = await resolveSensoryProfileAccess(req);
 
-    if (req.user.role !== "parent") {
-      return res.status(403).json({
-        message: "Solo un padre o cuidador puede ver perfiles de hijos",
-      });
-    }
+    const profile = await getProfileByUserId(ownerId);
 
-    if (!isValidId(childId)) {
-      return res.status(400).json({
-        message: "ID de niño inválido",
-      });
-    }
-
-    const childIdNumber = Number(childId);
-
-    const hasRelation = await checkParentChildRelation(parentId, childIdNumber);
-
-    if (!hasRelation) {
-      return res.status(403).json({
-        message: "No tienes permiso para ver este perfil sensorial",
-      });
-    }
-
-    const profile = await getProfileByUserId(childIdNumber);
-
-    res.json(profile);
+    return res.json(profile);
   } catch (error) {
-    console.error("Error obteniendo perfil sensorial del niño:", error);
+    console.error(
+      "Error obteniendo perfil sensorial del niño/a:",
+      error,
+    );
 
-    res.status(500).json({
-      message: "Error obteniendo perfil sensorial del niño",
+    return res.status(error.statusCode || 500).json({
+      message:
+        error.message ||
+        "Error obteniendo perfil sensorial del niño/a",
     });
   }
 };
 
-const upsertChildSensoryProfile = async (req, res) => {
+/*
+ * Crear o actualizar el perfil sensorial de un niño/a asociado.
+ *
+ * Todos los perfiles adultos asociados pueden editar.
+ */
+const upsertChildSensoryProfile = async (
+  req,
+  res,
+) => {
   const client = await pool.connect();
 
   try {
-    const parentId = Number(req.user.id);
-    const { childId } = req.params;
+    await client.query("BEGIN");
 
-    if (req.user.role !== "parent") {
-      return res.status(403).json({
-        message: "Solo un padre o cuidador puede editar perfiles de hijos",
-      });
-    }
-
-    if (!isValidId(childId)) {
-      return res.status(400).json({
-        message: "ID de niño inválido",
-      });
-    }
-
-    const childIdNumber = Number(childId);
-
-    const hasRelation = await checkParentChildRelation(parentId, childIdNumber);
-
-    if (!hasRelation) {
-      return res.status(403).json({
-        message: "No tienes permiso para editar este perfil sensorial",
-      });
-    }
+    const {
+      ownerId,
+      actorId,
+      accessProfile,
+      relationshipKey,
+    } = await resolveSensoryProfileAccess(
+      req,
+      client,
+    );
 
     const data = sanitizeProfilePayload(req.body);
 
-    await client.query("BEGIN");
+    const savedProfile =
+      await saveOrUpdateSensoryProfile(
+        client,
+        ownerId,
+        data,
+        actorId,
+        accessProfile,
+        relationshipKey,
+      );
 
-    const profile = await saveOrUpdateSensoryProfile(
+    await saveSensoryProfileHistory(
       client,
-      childIdNumber,
-      data
+      savedProfile,
+      actorId,
+      accessProfile,
+      relationshipKey,
     );
 
-    await saveSensoryProfileHistory(client, profile, parentId);
+    const completeProfile =
+      await getProfileByUserId(
+        ownerId,
+        client,
+      );
 
     await client.query("COMMIT");
 
-    res.status(200).json(profile);
+    return res.status(200).json(
+      completeProfile,
+    );
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => {});
+    await client
+      .query("ROLLBACK")
+      .catch(() => {});
 
-    console.error("Error guardando perfil sensorial del niño:", error);
+    console.error(
+      "Error guardando perfil sensorial del niño/a:",
+      error,
+    );
 
-    res.status(error.statusCode || 500).json({
-      message: error.message || "Error guardando perfil sensorial del niño",
+    return res.status(error.statusCode || 500).json({
+      message:
+        error.message ||
+        "Error guardando perfil sensorial del niño/a",
     });
   } finally {
     client.release();
   }
 };
 
-const getMySensoryProfileHistory = async (req, res) => {
+/*
+ * Historial del perfil sensorial propio.
+ */
+const getMySensoryProfileHistory = async (
+  req,
+  res,
+) => {
   try {
-    assertChildRole(req);
+    const {
+      ownerId,
+    } = await resolveSensoryProfileAccess(req);
 
-    const userId = req.user.id;
-    const history = await getSensoryProfileHistoryByUserId(userId);
+    const history =
+      await getSensoryProfileHistoryByUserId(
+        ownerId,
+      );
 
-    res.json(history);
+    return res.json(history);
   } catch (error) {
-    console.error("Error obteniendo historial sensorial propio:", error);
+    console.error(
+      "Error obteniendo historial sensorial propio:",
+      error,
+    );
 
-    res.status(error.statusCode || 500).json({
-      message: error.message || "Error obteniendo historial sensorial",
+    return res.status(error.statusCode || 500).json({
+      message:
+        error.message ||
+        "Error obteniendo historial sensorial",
     });
   }
 };
 
-const getChildSensoryProfileHistory = async (req, res) => {
+/*
+ * Historial del perfil sensorial de un niño/a asociado.
+ *
+ * Todos los perfiles adultos asociados pueden verlo.
+ */
+const getChildSensoryProfileHistory = async (
+  req,
+  res,
+) => {
   try {
-    const parentId = req.user.id;
-    const { childId } = req.params;
+    const {
+      ownerId,
+    } = await resolveSensoryProfileAccess(req);
 
-    if (req.user.role !== "parent") {
-      return res.status(403).json({
-        message: "Solo un padre o cuidador puede ver historial de hijos",
-      });
-    }
+    const history =
+      await getSensoryProfileHistoryByUserId(
+        ownerId,
+      );
 
-    if (!isValidId(childId)) {
-      return res.status(400).json({
-        message: "ID de niño inválido",
-      });
-    }
-
-    const childIdNumber = Number(childId);
-
-    const hasRelation = await checkParentChildRelation(parentId, childIdNumber);
-
-    if (!hasRelation) {
-      return res.status(403).json({
-        message: "No tienes permiso para ver este historial sensorial",
-      });
-    }
-
-    const history = await getSensoryProfileHistoryByUserId(childIdNumber);
-
-    res.json(history);
+    return res.json(history);
   } catch (error) {
-    console.error("Error obteniendo historial sensorial del niño:", error);
+    console.error(
+      "Error obteniendo historial sensorial del niño/a:",
+      error,
+    );
 
-    res.status(500).json({
-      message: "Error obteniendo historial sensorial del niño",
+    return res.status(error.statusCode || 500).json({
+      message:
+        error.message ||
+        "Error obteniendo historial sensorial del niño/a",
     });
   }
 };
