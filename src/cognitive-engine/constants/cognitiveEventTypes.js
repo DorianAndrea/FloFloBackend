@@ -1,0 +1,82 @@
+const COGNITIVE_EVENT_TYPES = Object.freeze({
+  // Rutinas
+  ROUTINE_COMPLETED: "ROUTINE_COMPLETED",
+  ROUTINE_COMPLETED_WITH_SUPPORT: "ROUTINE_COMPLETED_WITH_SUPPORT",
+  ROUTINE_SKIPPED: "ROUTINE_SKIPPED",
+
+  // Conversaciones
+  CONVERSATION_COMPLETED: "CONVERSATION_COMPLETED",
+  CONVERSATION_ABANDONED: "CONVERSATION_ABANDONED",
+  CONVERSATION_REPEATED: "CONVERSATION_REPEATED",
+
+  // Lugares y contextos
+  PLACE_VISITED: "PLACE_VISITED",
+  PLACE_EXPERIENCE_RECORDED: "PLACE_EXPERIENCE_RECORDED",
+
+  // Emociones y regulación
+  MOOD_RECORDED: "MOOD_RECORDED",
+  REGULATION_STRATEGY_USED: "REGULATION_STRATEGY_USED",
+
+  // Apoyos visuales e IVO
+  VISUAL_SUPPORT_COMPLETED: "VISUAL_SUPPORT_COMPLETED",
+  VISUAL_SUPPORT_ABANDONED: "VISUAL_SUPPORT_ABANDONED",
+
+  // Familia y profesionales
+  FAMILY_FEEDBACK_RECORDED: "FAMILY_FEEDBACK_RECORDED",
+  PROFESSIONAL_OBSERVATION_RECORDED:
+    "PROFESSIONAL_OBSERVATION_RECORDED",
+
+  // Eventos internos del sistema
+  ACHIEVEMENT_UNLOCKED: "ACHIEVEMENT_UNLOCKED",
+  CONCEPT_MASTERY_UPDATED: "CONCEPT_MASTERY_UPDATED",
+  RECOMMENDATION_CREATED: "RECOMMENDATION_CREATED",
+});
+
+const COGNITIVE_EVENT_CATEGORIES = Object.freeze({
+  EXPERIENCE: "EXPERIENCE",
+  FEEDBACK: "FEEDBACK",
+  SYSTEM: "SYSTEM",
+});
+
+const IMPLEMENTED_COGNITIVE_EVENT_TYPES = Object.freeze([
+  COGNITIVE_EVENT_TYPES.ROUTINE_COMPLETED,
+]);
+
+const isValidCognitiveEventType = (eventType) => {
+  return Object.values(COGNITIVE_EVENT_TYPES).includes(eventType);
+};
+
+const isImplementedCognitiveEventType = (eventType) => {
+  return IMPLEMENTED_COGNITIVE_EVENT_TYPES.includes(eventType);
+};
+
+const EVIDENCE_SOURCES = Object.freeze({
+  BEHAVIORAL: "behavioral",
+  FAMILY: "family",
+  PROFESSIONAL: "professional",
+  SYSTEM: "system",
+});
+
+const EVIDENCE_TYPES = Object.freeze({
+  ROUTINE_COMPLETION: "routine_completion",
+});
+
+const EVIDENCE_RESULTS = Object.freeze({
+  POSITIVE: "positive",
+  PARTIAL: "partial",
+  DIFFICULTY: "difficulty",
+  NEGATIVE: "negative",
+});
+
+module.exports = {
+  COGNITIVE_EVENT_TYPES,
+  COGNITIVE_EVENT_CATEGORIES,
+  IMPLEMENTED_COGNITIVE_EVENT_TYPES,
+  EVIDENCE_SOURCES,
+  EVIDENCE_TYPES,
+  EVIDENCE_RESULTS,
+  isValidCognitiveEventType,
+  isImplementedCognitiveEventType,
+};
+
+// que hace el archivo COGNITIVE_EVENT_TYPES contiene todos los nombres oficiales que FloFlo reconocerá.

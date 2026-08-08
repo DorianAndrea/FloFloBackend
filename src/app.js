@@ -19,6 +19,12 @@ const parentDashboardRoutes = require("./routes/parentDashboardRoutes");
 const parentChildRoutes = require("./routes/parentChildRoutes");
 const sensoryProfileRoutes = require("./routes/sensoryProfileRoutes");
 const intelligentObservationRoutes = require("./routes/intelligentObservationRoutes");
+const learningContextRoutes = require("./routes/learningContextRoutes"); 
+const experienceTemplateRoutes = require("./routes/experienceTemplateRoutes");
+const experienceLibraryRoutes = require("./routes/experienceLibraryRoutes");
+const experienceFavoriteRoutes = require("./routes/experienceFavoriteRoutes");
+const experienceRecommendationRoutes = require("./routes/experienceRecommendationRoutes");
+const experienceRecentRoutes = require("./routes/experienceRecentRoutes");
 
 const app = express();
 
@@ -74,6 +80,12 @@ app.use("/api/parent-dashboard", parentDashboardRoutes);
 app.use("/api/parent-child", parentChildRoutes);
 app.use("/api/sensory-profile", sensoryProfileRoutes);
 app.use("/api/intelligent-observations", intelligentObservationRoutes);
+app.use("/api/learning-contexts", learningContextRoutes);
+app.use("/api/experience-library", experienceLibraryRoutes);
+app.use("/api/experience-templates", experienceTemplateRoutes);
+app.use("/api/experience-favorites", experienceFavoriteRoutes);
+app.use("/api/experience-recommendations", experienceRecommendationRoutes);
+app.use("/api/experience-recents", experienceRecentRoutes);
 
 app.get("/", (req, res) => {
   res.send("Backend FloFlo funcionando");

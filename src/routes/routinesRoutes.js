@@ -10,6 +10,8 @@ const {
   createRoutine,
   deleteRoutine,
   updateRoutine,
+  completeRoutineStep,
+  uncompleteRoutineStep,
   completeRoutine,
 } = require("../controllers/routineController");
 
@@ -25,7 +27,20 @@ router.post("/children/:childId", authMiddleware, createRoutine);
 router.put("/children/:childId/:id", authMiddleware, updateRoutine);
 router.delete("/children/:childId/:id", authMiddleware, deleteRoutine);
 router.post("/children/:childId/:id/complete", authMiddleware, completeRoutine);
+router.post(
+  "/children/:childId/:routineId/steps/:stepId/complete",
+  authMiddleware,
+  completeRoutineStep,
+);
+router.delete(
+  "/children/:childId/:routineId/steps/:stepId/complete",
+  authMiddleware,
+  uncompleteRoutineStep,
+);
 
+/*
+  Rutas normales para niño/a usando sus propias rutinas.
+*/
 /*
   Rutas normales para niño/a usando sus propias rutinas.
 */
@@ -35,9 +50,29 @@ router.get("/", authMiddleware, getRoutines);
 
 router.post("/", authMiddleware, createRoutine);
 
+/*
+  Las rutas específicas de pasos deben ir antes
+  que las rutas genéricas con /:id.
+*/
+router.post(
+  "/:routineId/steps/:stepId/complete",
+  authMiddleware,
+  completeRoutineStep,
+);
+
+router.delete(
+  "/:routineId/steps/:stepId/complete",
+  authMiddleware,
+  uncompleteRoutineStep,
+);
+
+router.post(
+  "/:id/complete",
+  authMiddleware,
+  completeRoutine,
+);
+
 router.put("/:id", authMiddleware, updateRoutine);
 router.delete("/:id", authMiddleware, deleteRoutine);
-
-router.post("/:id/complete", authMiddleware, completeRoutine);
 
 module.exports = router;

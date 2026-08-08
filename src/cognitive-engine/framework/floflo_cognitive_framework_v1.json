@@ -1,0 +1,1596 @@
+{
+  "framework": {
+    "name": "FloFlo Cognitive Framework",
+    "short_name": "FCF",
+    "version": "1.0.0",
+    "status": "draft",
+    "language": "es",
+    "authors": [
+      "FloFlo",
+      "Adaptive Intelligence Team"
+    ],
+    "description": "Framework Cognitivo Oficial de FloFlo."
+  },
+  "experiences": [
+    {
+      "template_code": "SLEEP_PREPARATION",
+      "template_name": "Prepararse para dormir",
+      "category": "LIFE_ROUTINE",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "SEQUENCING",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "TRANSITIONS",
+          "weight": 0.8,
+          "is_primary": false
+        },
+        {
+          "code": "PERSONAL_HYGIENE",
+          "weight": 0.6,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "MORNING_PREPARATION",
+      "template_name": "Prepararse para comenzar el día",
+      "category": "LIFE_ROUTINE",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "AUTONOMY",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "SEQUENCING",
+          "weight": 0.8,
+          "is_primary": false
+        },
+        {
+          "code": "PLANNING",
+          "weight": 0.6,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "BRUSH_TEETH",
+      "template_name": "Lavarse los dientes",
+      "category": "SELF_CARE",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "AUTONOMY",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "PERSONAL_HYGIENE",
+          "weight": 0.9,
+          "is_primary": false
+        },
+        {
+          "code": "SEQUENCING",
+          "weight": 0.8,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "WASH_HANDS",
+      "template_name": "Lavarse las manos",
+      "category": "SELF_CARE",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "PERSONAL_HYGIENE",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "AUTONOMY",
+          "weight": 0.8,
+          "is_primary": false
+        },
+        {
+          "code": "SEQUENCING",
+          "weight": 0.7,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "TAKE_SHOWER",
+      "template_name": "Ducharse",
+      "category": "SELF_CARE",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "PERSONAL_HYGIENE",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "AUTONOMY",
+          "weight": 0.9,
+          "is_primary": false
+        },
+        {
+          "code": "SEQUENCING",
+          "weight": 0.7,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "USE_TOILET",
+      "template_name": "Ir al baño",
+      "category": "SELF_CARE",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "AUTONOMY",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "PERSONAL_HYGIENE",
+          "weight": 0.9,
+          "is_primary": false
+        },
+        {
+          "code": "SEQUENCING",
+          "weight": 0.6,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "GET_DRESSED",
+      "template_name": "Vestirse",
+      "category": "AUTONOMY",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "AUTONOMY",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "PLANNING",
+          "weight": 0.8,
+          "is_primary": false
+        },
+        {
+          "code": "SEQUENCING",
+          "weight": 0.8,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "COMB_HAIR",
+      "template_name": "Peinarse",
+      "category": "SELF_CARE",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "PERSONAL_HYGIENE",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "AUTONOMY",
+          "weight": 0.7,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "PREPARE_BACKPACK",
+      "template_name": "Preparar la mochila",
+      "category": "SCHOOL",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "ORGANIZATION",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "PLANNING",
+          "weight": 0.8,
+          "is_primary": false
+        },
+        {
+          "code": "SEQUENCING",
+          "weight": 0.7,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "PREPARE_FOR_SCHOOL",
+      "template_name": "Prepararse para ir al colegio",
+      "category": "SCHOOL",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "PLANNING",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "ORGANIZATION",
+          "weight": 0.8,
+          "is_primary": false
+        },
+        {
+          "code": "AUTONOMY",
+          "weight": 0.7,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "ARRIVE_AT_SCHOOL",
+      "template_name": "Llegar al colegio",
+      "category": "SCHOOL",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "TRANSITIONS",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "ATTENTION",
+          "weight": 0.7,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "PREPARE_FOR_CLASS",
+      "template_name": "Prepararse para una clase",
+      "category": "SCHOOL",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "ATTENTION",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "SEQUENCING",
+          "weight": 0.7,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "STORE_SCHOOL_MATERIALS",
+      "template_name": "Guardar materiales",
+      "category": "SCHOOL",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "ORGANIZATION",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "AUTONOMY",
+          "weight": 0.7,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "PREPARE_FOR_RECESS",
+      "template_name": "Prepararse para el recreo",
+      "category": "SCHOOL",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "TRANSITIONS",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "AUTONOMY",
+          "weight": 0.6,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "RETURN_FROM_RECESS",
+      "template_name": "Volver a clases después del recreo",
+      "category": "SCHOOL",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "TRANSITIONS",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "REGULATION",
+          "weight": 0.7,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "PREPARE_TO_GO_HOME",
+      "template_name": "Prepararse para volver a casa",
+      "category": "SCHOOL",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "PLANNING",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "TRANSITIONS",
+          "weight": 0.7,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "ORGANIZE_BEDROOM",
+      "template_name": "Ordenar la habitación",
+      "category": "HOME",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "ORGANIZATION",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "AUTONOMY",
+          "weight": 0.8,
+          "is_primary": false
+        },
+        {
+          "code": "PLANNING",
+          "weight": 0.6,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "PUT_AWAY_TOYS",
+      "template_name": "Guardar juguetes",
+      "category": "HOME",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "ORGANIZATION",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "AUTONOMY",
+          "weight": 0.8,
+          "is_primary": false
+        },
+        {
+          "code": "SEQUENCING",
+          "weight": 0.7,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "SET_TABLE",
+      "template_name": "Preparar la mesa",
+      "category": "HOME",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "SEQUENCING",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "ORGANIZATION",
+          "weight": 0.8,
+          "is_primary": false
+        },
+        {
+          "code": "AUTONOMY",
+          "weight": 0.6,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "CLEAR_TABLE",
+      "template_name": "Limpiar la mesa",
+      "category": "HOME",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "ORGANIZATION",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "SEQUENCING",
+          "weight": 0.7,
+          "is_primary": false
+        },
+        {
+          "code": "AUTONOMY",
+          "weight": 0.6,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "WATER_PLANT",
+      "template_name": "Regar una planta",
+      "category": "HOME",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "AUTONOMY",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "SEQUENCING",
+          "weight": 0.6,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "PREPARE_TO_EAT",
+      "template_name": "Prepararse para comer",
+      "category": "FOOD",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "SEQUENCING",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "SELF_FEEDING",
+          "weight": 0.8,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "EAT_WITH_UTENSILS",
+      "template_name": "Comer con cubiertos",
+      "category": "FOOD",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "SELF_FEEDING",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "AUTONOMY",
+          "weight": 0.8,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "SERVE_WATER",
+      "template_name": "Servirse agua",
+      "category": "FOOD",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "SELF_FEEDING",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "AUTONOMY",
+          "weight": 0.8,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "PREPARE_SNACK",
+      "template_name": "Preparar una colación",
+      "category": "FOOD",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "SELF_FEEDING",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "PLANNING",
+          "weight": 0.7,
+          "is_primary": false
+        },
+        {
+          "code": "SEQUENCING",
+          "weight": 0.6,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "GO_TO_SUPERMARKET",
+      "template_name": "Ir al supermercado",
+      "category": "COMMUNITY",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "REGULATION",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "WAITING",
+          "weight": 0.7,
+          "is_primary": false
+        },
+        {
+          "code": "ATTENTION",
+          "weight": 0.6,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "GO_TO_PLAYGROUND",
+      "template_name": "Ir a la plaza",
+      "category": "COMMUNITY",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "SOCIAL_INTERACTION",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "WAITING",
+          "weight": 0.5,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "GO_TO_DOCTOR",
+      "template_name": "Ir al médico",
+      "category": "COMMUNITY",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "WAITING",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "REGULATION",
+          "weight": 0.8,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "USE_PUBLIC_TRANSPORT",
+      "template_name": "Viajar en transporte público",
+      "category": "COMMUNITY",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "SAFETY",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "WAITING",
+          "weight": 0.7,
+          "is_primary": false
+        },
+        {
+          "code": "REGULATION",
+          "weight": 0.6,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "CROSS_STREET_WITH_ADULT",
+      "template_name": "Cruzar la calle con un adulto",
+      "category": "COMMUNITY",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "SAFETY",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "ATTENTION",
+          "weight": 0.9,
+          "is_primary": false
+        },
+        {
+          "code": "WAITING",
+          "weight": 0.7,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "SAY_HELLO",
+      "template_name": "Saludar",
+      "category": "COMMUNICATION",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "COMMUNICATION",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "SOCIAL_INTERACTION",
+          "weight": 0.8,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "ASK_FOR_HELP",
+      "template_name": "Pedir ayuda",
+      "category": "COMMUNICATION",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "REQUEST_HELP",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "COMMUNICATION",
+          "weight": 0.9,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "ASK_FOR_OBJECT",
+      "template_name": "Pedir un objeto",
+      "category": "COMMUNICATION",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "COMMUNICATION",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "REQUEST_HELP",
+          "weight": 0.7,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "WAIT_FOR_TURN",
+      "template_name": "Esperar un turno",
+      "category": "COMMUNICATION",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "TURN_TAKING",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "WAITING",
+          "weight": 0.8,
+          "is_primary": false
+        },
+        {
+          "code": "REGULATION",
+          "weight": 0.5,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "EXPRESS_FEELINGS",
+      "template_name": "Contar cómo me siento",
+      "category": "COMMUNICATION",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "COMMUNICATION",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "EMOTION_RECOGNITION",
+          "weight": 0.8,
+          "is_primary": false
+        },
+        {
+          "code": "REGULATION",
+          "weight": 0.6,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "ASK_FOR_BREAK",
+      "template_name": "Pedir un descanso",
+      "category": "REGULATION",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "REQUEST_HELP",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "REGULATION",
+          "weight": 0.8,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "GO_TO_CALM_SPACE",
+      "template_name": "Ir a un espacio tranquilo",
+      "category": "REGULATION",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "REGULATION",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "AUTONOMY",
+          "weight": 0.6,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "SELF_REGULATE_BREATHING",
+      "template_name": "Regularse con respiración",
+      "category": "REGULATION",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "REGULATION",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "ATTENTION",
+          "weight": 0.6,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "IDENTIFY_BODY_STATE",
+      "template_name": "Identificar cómo está mi cuerpo",
+      "category": "REGULATION",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "EMOTION_RECOGNITION",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "REGULATION",
+          "weight": 0.7,
+          "is_primary": false
+        }
+      ]
+    },
+    {
+      "template_code": "PREPARE_FOR_ACTIVITY_TRANSITION",
+      "template_name": "Prepararse para un cambio de actividad",
+      "category": "REGULATION",
+      "recommended_age": {
+        "min": 2,
+        "max": 99
+      },
+      "difficulty": 2,
+      "typical_contexts": [],
+      "prerequisites": [],
+      "learning_objectives": [
+        "Favorecer la autonomía funcional.",
+        "Desarrollar habilidades del concepto principal."
+      ],
+      "mastery_indicators": [
+        "Completa la actividad con menor apoyo.",
+        "Generaliza la habilidad."
+      ],
+      "generalization_contexts": [
+        "HOME",
+        "SCHOOL",
+        "COMMUNITY"
+      ],
+      "concepts": [
+        {
+          "code": "TRANSITIONS",
+          "weight": 1,
+          "is_primary": true
+        },
+        {
+          "code": "FLEXIBILITY",
+          "weight": 0.8,
+          "is_primary": false
+        },
+        {
+          "code": "PLANNING",
+          "weight": 0.5,
+          "is_primary": false
+        }
+      ]
+    }
+  ]
+}
