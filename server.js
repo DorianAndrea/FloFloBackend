@@ -1,5 +1,7 @@
 require("dotenv").config();
 
+require("./src/cognitive-engine/cognitiveKernel");
+
 const {
   startCognitiveWorker,
   stopCognitiveWorker,

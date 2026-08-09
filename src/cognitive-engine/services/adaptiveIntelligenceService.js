@@ -1,4 +1,14 @@
 const pool = require("../../database/db");
+const cognitiveKernel = require("../cognitiveKernel");
+
+const MASTERY_PRIORITY = Object.freeze({
+  unknown: 0,
+  exposure: 18,
+  learning: 14,
+  understood: 6,
+  generalized: -8,
+  mastered: -20,
+});
 
 const PRIORITY_RULES = Object.freeze({
   BASE: 10,
@@ -60,8 +70,48 @@ const buildExplanation = ({
 
   return explanations;
 };
+const buildCognitiveExplanation = (cognitiveProfile) => {
+  const explanations = [];
 
-const evaluateExperienceCandidate = (candidate) => {
+  const priorityConcept = cognitiveProfile
+    .filter((concept) =>
+      ["exposure", "learning", "understood"].includes(concept.mastery_level),
+    )
+    .sort((a, b) => b.weight - a.weight)[0];
+
+  if (!priorityConcept) {
+    return explanations;
+  }
+
+  const conceptName = priorityConcept.name || priorityConcept.code;
+
+  if (priorityConcept.mastery_level === "exposure") {
+    explanations.push(
+      `Esta experiencia ayuda a desarrollar ${conceptName.toLowerCase()}.`,
+    );
+  }
+
+  if (priorityConcept.mastery_level === "learning") {
+    explanations.push(
+      `Esta experiencia fortalece ${conceptName.toLowerCase()}.`,
+    );
+  }
+
+  if (priorityConcept.mastery_level === "understood") {
+    explanations.push(
+      `Esta experiencia ayuda a consolidar ${conceptName.toLowerCase()}.`,
+    );
+  }
+
+  return explanations;
+};
+
+const evaluateExperienceCandidate = (
+  candidate,
+  frameworkExperience,
+  masteryByConcept,
+  conceptMetaByCode,
+) => {
   let priority = PRIORITY_RULES.BASE;
 
   const openCount = Number(candidate.open_count || 0);
@@ -112,7 +162,57 @@ const evaluateExperienceCandidate = (candidate) => {
     priority += PRIORITY_RULES.VERY_FREQUENTLY_USED;
   }
 
-  const explanations = buildExplanation({
+  /*
+   * Información cognitiva proveniente del FCF.
+   */
+  const frameworkConcepts = frameworkExperience?.concepts || [];
+
+  const primaryConcept =
+    frameworkConcepts.find((concept) => concept.is_primary === true) || null;
+
+  const cognitiveProfile = frameworkConcepts.map((concept) => {
+    const mastery = masteryByConcept?.get(concept.code);
+
+    const conceptMeta = conceptMetaByCode?.get(concept.code);
+
+    return {
+      code: concept.code,
+      name: mastery?.concept_name || conceptMeta?.name || concept.code,
+      weight: Number(concept.weight),
+      is_primary: Boolean(concept.is_primary),
+
+      mastery_level: mastery?.mastery_level || "unknown",
+
+      mastery_score:
+        mastery?.mastery_score !== undefined && mastery?.mastery_score !== null
+          ? Number(mastery.mastery_score)
+          : null,
+
+      confidence:
+        mastery?.confidence !== undefined && mastery?.confidence !== null
+          ? Number(mastery.confidence)
+          : null,
+
+      evidence_count: Number(mastery?.evidence_count || 0),
+
+      context_count: Number(mastery?.context_count || 0),
+
+      successful_context_count: Number(mastery?.successful_context_count || 0),
+    };
+  });
+  let masteryAdjustment = 0;
+
+  for (const concept of cognitiveProfile) {
+    const levelAdjustment = MASTERY_PRIORITY[concept.mastery_level] || 0;
+
+    masteryAdjustment += levelAdjustment * concept.weight;
+  }
+
+  priority += Math.round(masteryAdjustment);
+
+  const cognitiveExplanations = buildCognitiveExplanation(cognitiveProfile);
+
+  const usageExplanations = buildExplanation({
     neverOpened,
     usedToday,
     daysSinceOpened,
@@ -121,10 +221,20 @@ const evaluateExperienceCandidate = (candidate) => {
     learningContextName: candidate.learning_context_name,
   });
 
+  const explanations = [...cognitiveExplanations, ...usageExplanations];
+
   return {
     ...candidate,
 
     recommendation_priority: priority,
+
+    mastery_adjustment: Math.round(masteryAdjustment),
+
+    framework_mapped: Boolean(frameworkExperience),
+
+    primary_concept_code: primaryConcept?.code || null,
+
+    cognitive_concepts: cognitiveProfile,
 
     explanations,
 
@@ -170,6 +280,7 @@ const getAdaptiveExperienceRecommendations = async ({
     `
     SELECT
       et.id AS template_id,
+      et.code AS template_code,
       et.name,
       et.description,
       et.icon,
@@ -231,9 +342,62 @@ const getAdaptiveExperienceRecommendations = async ({
     `,
     [ownerUserId, actorUserId],
   );
+  const masteryResult = await pool.query(
+    `
+  SELECT
+    cc.code AS concept_code,
+    cc.name AS concept_name,
+    ccm.mastery_level,
+    ccm.mastery_score,
+    ccm.confidence,
+    ccm.evidence_count,
+    ccm.positive_evidence_count,
+    ccm.negative_evidence_count,
+    ccm.context_count,
+    ccm.successful_context_count,
+    ccm.last_evidence_at,
+    ccm.last_progress_at
 
+  FROM "FloFlo".child_concept_mastery ccm
+
+  JOIN "FloFlo".cognitive_concept cc
+    ON cc.id = ccm.concept_id
+
+  WHERE ccm.child_id = $1
+  `,
+    [ownerUserId],
+  );
+
+  const conceptsResult = await pool.query(
+    `
+  SELECT
+    code,
+    name
+  FROM "FloFlo".cognitive_concept
+  WHERE active = TRUE
+  `,
+  );
+
+  const conceptMetaByCode = new Map(
+    conceptsResult.rows.map((concept) => [concept.code, concept]),
+  );
+
+  const masteryByConcept = new Map(
+    masteryResult.rows.map((mastery) => [mastery.concept_code, mastery]),
+  );
   const rankedCandidates = result.rows
-    .map(evaluateExperienceCandidate)
+    .map((row) => {
+      const frameworkExperience = cognitiveKernel.getExperience(
+        row.template_code,
+      );
+
+      return evaluateExperienceCandidate(
+        row,
+        frameworkExperience,
+        masteryByConcept,
+        conceptMetaByCode,
+      );
+    })
     .sort((a, b) => {
       const priorityDifference =
         b.recommendation_priority - a.recommendation_priority;

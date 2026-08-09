@@ -1,5 +1,7 @@
 const pool = require("../../database/db");
 
+const { updateMasteryForEvent } = require("./masteryEngineService");
+
 const {
   COGNITIVE_EVENT_TYPES,
   isValidCognitiveEventType,
@@ -312,10 +314,17 @@ const processEventById = async (eventId) => {
       client,
     });
 
+    const masteryResult = await updateMasteryForEvent({
+      eventId: event.id,
+      childId: event.child_id,
+      client,
+    });
+
     const processingResult = {
       eventType: event.event_type,
       evidenceResult: evidenceResult || {},
       contextAggregationResult: contextAggregationResult || {},
+      masteryResult: masteryResult || {},
     };
 
     await markAttemptAsProcessed(

@@ -1,6 +1,10 @@
 const pool = require("../database/db");
 
 const {
+  getConceptsForExperience,
+} = require("../cognitive-engine/services/frameworkConceptService");
+
+const {
   checkAndUnlockAchievements,
 } = require("../services/achievementService");
 const {
@@ -383,8 +387,7 @@ const getRoutines = async (req, res) => {
 
 const getTodayRoutines = async (req, res) => {
   try {
-    const { ownerId, isAdultManagingChild } =
-      await resolveRoutineOwnerId(req);
+    const { ownerId, isAdultManagingChild } = await resolveRoutineOwnerId(req);
 
     const { dateString, dayKey } = getTodayInfo();
 
@@ -512,15 +515,10 @@ const getTodayRoutines = async (req, res) => {
       })),
     });
   } catch (error) {
-    console.error(
-      "Error obteniendo rutinas de hoy:",
-      error,
-    );
+    console.error("Error obteniendo rutinas de hoy:", error);
 
     return res.status(error.statusCode || 500).json({
-      message:
-        error.message ||
-        "Error obteniendo rutinas de hoy",
+      message: error.message || "Error obteniendo rutinas de hoy",
     });
   }
 };
@@ -624,6 +622,7 @@ const createRoutine = async (req, res) => {
       daysOfWeek,
       learning_context_id,
       steps,
+      experience_template_id,
     } = req.body;
 
     if (!name || !start_time || !end_time || !learning_context_id) {
@@ -661,6 +660,34 @@ const createRoutine = async (req, res) => {
 
     const cleanSteps = normalizeRoutineSteps(steps);
 
+    let cleanExperienceTemplateId = null;
+
+    if (
+      experience_template_id !== undefined &&
+      experience_template_id !== null
+    ) {
+      cleanExperienceTemplateId = validatePositiveInteger(
+        experience_template_id,
+        "experience_template_id",
+      );
+
+      const templateResult = await client.query(
+        `
+    SELECT id
+    FROM "FloFlo".experience_template
+    WHERE id = $1
+      AND is_active = TRUE
+    `,
+        [cleanExperienceTemplateId],
+      );
+
+      if (templateResult.rows.length === 0) {
+        throw createHttpError(
+          "La experiencia seleccionada no existe o está inactiva",
+          400,
+        );
+      }
+    }
     const routineResult = await client.query(
       `
       INSERT INTO "FloFlo".routine (
@@ -671,6 +698,7 @@ const createRoutine = async (req, res) => {
         end_time,
         days_of_week,
         learning_context_id,
+        experience_template_id,
         is_active,
 
         created_by,
@@ -692,15 +720,16 @@ const createRoutine = async (req, res) => {
         $5,
         $6,
         $7,
+        $8,
         TRUE,
 
-        $8,
         $9,
         $10,
+        $11,
 
-        $8,
         $9,
         $10,
+        $11,
 
         NOW(),
         NOW()
@@ -715,6 +744,7 @@ const createRoutine = async (req, res) => {
         cleanEndTime,
         cleanDaysOfWeek,
         learningContext.id,
+        cleanExperienceTemplateId,
 
         actorId,
         accessProfile,
@@ -1197,20 +1227,14 @@ const uncompleteRoutineStep = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const {
-      ownerId,
-      isAdultManagingChild,
-    } = await resolveRoutineOwnerId(req, client);
-
-    const routineId = validatePositiveInteger(
-      req.params.routineId,
-      "Rutina",
+    const { ownerId, isAdultManagingChild } = await resolveRoutineOwnerId(
+      req,
+      client,
     );
 
-    const stepId = validatePositiveInteger(
-      req.params.stepId,
-      "Paso",
-    );
+    const routineId = validatePositiveInteger(req.params.routineId, "Rutina");
+
+    const stepId = validatePositiveInteger(req.params.stepId, "Paso");
 
     const { dateString } = getTodayInfo();
 
@@ -1236,10 +1260,7 @@ const uncompleteRoutineStep = async (req, res) => {
     );
 
     if (stepResult.rows.length === 0) {
-      throw createHttpError(
-        "El paso no pertenece a esta rutina",
-        404,
-      );
+      throw createHttpError("El paso no pertenece a esta rutina", 404);
     }
 
     const deletedResult = await client.query(
@@ -1253,12 +1274,7 @@ const uncompleteRoutineStep = async (req, res) => {
 
       RETURNING *
       `,
-      [
-        ownerId,
-        routineId,
-        stepId,
-        dateString,
-      ],
+      [ownerId, routineId, stepId, dateString],
     );
 
     await client.query("COMMIT");
@@ -1277,15 +1293,10 @@ const uncompleteRoutineStep = async (req, res) => {
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
 
-    console.error(
-      "Error desmarcando paso de rutina:",
-      error,
-    );
+    console.error("Error desmarcando paso de rutina:", error);
 
     return res.status(error.statusCode || 500).json({
-      message:
-        error.message ||
-        "No se pudo desmarcar el paso",
+      message: error.message || "No se pudo desmarcar el paso",
     });
   } finally {
     client.release();
@@ -1345,6 +1356,35 @@ const completeRoutine = async (req, res) => {
     }
 
     const routine = routineResult.rows[0];
+    let conceptCodes = [];
+
+    if (routine.experience_template_id) {
+      const templateResult = await client.query(
+        `
+    SELECT code
+    FROM "FloFlo".experience_template
+    WHERE id = $1
+      AND is_active = TRUE
+    LIMIT 1
+    `,
+        [routine.experience_template_id],
+      );
+
+      const templateCode = templateResult.rows[0]?.code || null;
+
+      if (templateCode) {
+        const concepts = getConceptsForExperience(templateCode);
+
+        conceptCodes = concepts.map((concept) => concept.code);
+
+        console.log(
+          "[Cognitive Engine] templateCode:",
+          templateCode,
+          "conceptCodes:",
+          conceptCodes,
+        );
+      }
+    }
     const routineDays = routine.days_of_week || ALL_DAYS;
 
     if (!routineDays.includes(dayKey)) {
@@ -1412,7 +1452,7 @@ const completeRoutine = async (req, res) => {
 
       progressRow = existingProgress.rows[0] || null;
     }
-    if (!alreadyCompleted && progressRow) {
+    if (!alreadyCompleted && progressRow && conceptCodes.length > 0) {
       await publishLearningEvent(
         {
           idempotencyKey: `routine_progress:${progressRow.id}:completed`,
@@ -1426,7 +1466,7 @@ const completeRoutine = async (req, res) => {
           sourceEntityType: "routine_progress",
           sourceEntityId: progressRow.id,
 
-          conceptCodes: ["AUTONOMY", "TRANSITIONS"],
+          conceptCodes,
 
           context: {
             routineId: id,
@@ -1466,6 +1506,11 @@ const completeRoutine = async (req, res) => {
         },
         client,
       );
+      if (!alreadyCompleted && progressRow && conceptCodes.length === 0) {
+        console.warn(
+          `[Cognitive Engine] Rutina ${routine.id} (${routine.name}) completada sin conceptos FCF. No se publicó evento cognitivo.`,
+        );
+      }
     }
 
     if (!alreadyCompleted) {

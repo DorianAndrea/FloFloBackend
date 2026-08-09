@@ -1,4 +1,8 @@
 const {
+  loadFramework,
+} = require("../cognitive-engine/frameworkLoader");
+
+const {
   getAdaptiveExperienceRecommendations,
 } = require("../cognitive-engine/services/adaptiveIntelligenceService");
 
@@ -26,6 +30,7 @@ const getExperienceRecommendations = async (req, res) => {
 
     const ownerUserId = requestedChildId || actorUserId;
 
+    
     const recommendations =
       await getAdaptiveExperienceRecommendations({
         ownerUserId,
