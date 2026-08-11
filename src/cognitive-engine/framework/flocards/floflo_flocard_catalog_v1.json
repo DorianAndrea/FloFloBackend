@@ -1,0 +1,45 @@
+{
+  "catalog": {
+    "name": "FloFlo FloCard Catalog",
+    "version": "1.0.0",
+    "status": "draft",
+    "language": "es"
+  },
+  "flocards": [
+    {
+      "code": "BRUSH_TEETH_ACTION",
+      "name": "Cepillar los dientes",
+      "description": "Objeto visual interactivo que representa la acción de cepillar los dientes.",
+      "icon": "🪥",
+      "interaction_type": "guided_action",
+      "action": "brush_teeth",
+      "concepts": [
+        "PERSONAL_HYGIENE",
+        "AUTONOMY",
+        "SEQUENCING"
+      ],
+      "states": [
+        "idle",
+        "ready",
+        "active",
+        "completed"
+      ],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+      {
+      "experience_code": "BRUSH_TEETH",
+      "step_title": "Cepillar los dientes"
+    }
+    ]
+    }
+  ]
+}

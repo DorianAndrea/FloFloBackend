@@ -150,6 +150,13 @@ const normalizeRoutineSteps = (steps) => {
 
     const icon = String(step?.icon || "✨").trim();
 
+    const floCardCode =
+      step?.flocard_code === null ||
+      step?.flocard_code === undefined ||
+      step?.flocard_code === ""
+        ? null
+        : String(step.flocard_code).trim();
+
     const estimatedMinutes =
       step?.estimated_minutes === null ||
       step?.estimated_minutes === undefined ||
@@ -175,6 +182,7 @@ const normalizeRoutineSteps = (steps) => {
       title,
       description,
       icon: icon || "✨",
+      flocard_code: floCardCode,
       position: index + 1,
       estimatedMinutes,
       isOptional: Boolean(step?.is_optional),
@@ -337,6 +345,7 @@ const getRoutines = async (req, res) => {
             'title', rs.title,
             'description', rs.description,
             'icon', rs.icon,
+            'flocard_code', rs.flocard_code,
             'position', rs.position,
             'estimated_minutes', rs.estimated_minutes,
             'is_optional', rs.is_optional
@@ -451,6 +460,7 @@ const getTodayRoutines = async (req, res) => {
               'title', rs.title,
               'description', rs.description,
               'icon', rs.icon,
+              'flocard_code', rs.flocard_code,
               'position', rs.position,
               'estimated_minutes',
                 rs.estimated_minutes,
@@ -758,37 +768,40 @@ const createRoutine = async (req, res) => {
     for (const step of cleanSteps) {
       const stepResult = await client.query(
         `
-        INSERT INTO "FloFlo".routine_step (
-          routine_id,
-          title,
-          description,
-          icon,
-          position,
-          estimated_minutes,
-          is_optional,
-          is_active,
-          created_at,
-          updated_at
-        )
-        VALUES (
-          $1,
-          $2,
-          $3,
-          $4,
-          $5,
-          $6,
-          $7,
-          TRUE,
-          NOW(),
-          NOW()
-        )
-        RETURNING *
-        `,
+    INSERT INTO "FloFlo".routine_step (
+      routine_id,
+      title,
+      description,
+      icon,
+      flocard_code,
+      position,
+      estimated_minutes,
+      is_optional,
+      is_active,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      $1,
+      $2,
+      $3,
+      $4,
+      $5,
+      $6,
+      $7,
+      $8,
+      TRUE,
+      NOW(),
+      NOW()
+    )
+    RETURNING *
+    `,
         [
           routine.id,
           step.title,
           step.description,
           step.icon,
+          step.flocard_code || null,
           step.position,
           step.estimatedMinutes,
           step.isOptional,
@@ -841,14 +854,18 @@ const createRoutine = async (req, res) => {
 };
 
 const updateRoutine = async (req, res) => {
+  const client = await pool.connect();
+
   try {
+    await client.query("BEGIN");
+
     const {
       ownerId,
       actorId,
       isAdultManagingChild,
       accessProfile,
       relationshipKey,
-    } = await resolveRoutineOwnerId(req);
+    } = await resolveRoutineOwnerId(req, client);
 
     if (isAdultManagingChild && !canCreateOrEditRoutine(accessProfile)) {
       throw createHttpError(
@@ -867,13 +884,14 @@ const updateRoutine = async (req, res) => {
       days_of_week,
       daysOfWeek,
       learning_context_id,
+      steps,
     } = req.body;
 
     if (!name || !start_time || !end_time || !learning_context_id) {
-      return res.status(400).json({
-        message:
-          "name, start_time, end_time y learning_context_id son obligatorios",
-      });
+      throw createHttpError(
+        "name, start_time, end_time y learning_context_id son obligatorios",
+        400,
+      );
     }
 
     const cleanName = String(name).trim();
@@ -882,6 +900,7 @@ const updateRoutine = async (req, res) => {
       typeof description === "string" ? description.trim() : "";
 
     const cleanStartTime = String(start_time).trim();
+
     const cleanEndTime = String(end_time).trim();
 
     const shouldUpdateDays =
@@ -891,21 +910,46 @@ const updateRoutine = async (req, res) => {
       ? normalizeDaysOfWeek(days_of_week ?? daysOfWeek)
       : null;
 
-    if (!cleanName || !cleanStartTime || !cleanEndTime) {
-      return res.status(400).json({
-        message: "name, start_time y end_time son obligatorios",
-      });
+    if (!cleanName) {
+      throw createHttpError("El nombre de la rutina es obligatorio", 400);
     }
 
     if (cleanEndTime <= cleanStartTime) {
-      return res.status(400).json({
-        message: "La hora de término debe ser posterior a la hora de inicio",
-      });
+      throw createHttpError(
+        "La hora de término debe ser posterior a la hora de inicio",
+        400,
+      );
     }
 
-    const learningContext = await validateLearningContext(learning_context_id);
+    const learningContext = await validateLearningContext(
+      learning_context_id,
+      client,
+    );
 
-    const result = await pool.query(
+    /*
+     * Verifica primero que la rutina exista
+     * y pertenezca al niño/a correcto.
+     */
+    const currentRoutineResult = await client.query(
+      `
+        SELECT *
+        FROM "FloFlo".routine
+        WHERE id = $1
+          AND user_id = $2
+          AND COALESCE(is_active, TRUE) = TRUE
+        LIMIT 1
+        `,
+      [id, ownerId],
+    );
+
+    if (currentRoutineResult.rows.length === 0) {
+      throw createHttpError("Rutina no encontrada", 404);
+    }
+
+    /*
+     * Actualiza información principal.
+     */
+    const result = await client.query(
       `
       UPDATE "FloFlo".routine
       SET
@@ -913,10 +957,12 @@ const updateRoutine = async (req, res) => {
         description = $2,
         start_time = $3,
         end_time = $4,
+
         days_of_week = COALESCE(
           $5::TEXT[],
           days_of_week
         ),
+
         learning_context_id = $6,
 
         updated_by = $7,
@@ -927,7 +973,7 @@ const updateRoutine = async (req, res) => {
 
       WHERE id = $10
         AND user_id = $11
-        AND COALESCE(is_active, true) = true
+        AND COALESCE(is_active, TRUE) = TRUE
 
       RETURNING *
       `,
@@ -948,28 +994,228 @@ const updateRoutine = async (req, res) => {
       ],
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        message: "Rutina no encontrada",
-      });
+    /*
+     * Si "steps" viene en el payload,
+     * sincronizamos los pasos.
+     *
+     * Si no viene, dejamos los actuales intactos.
+     */
+    let savedSteps = null;
+
+    if (steps !== undefined) {
+      if (!Array.isArray(steps)) {
+        throw createHttpError("steps debe ser una lista", 400);
+      }
+
+      if (steps.length === 0) {
+        throw createHttpError(
+          "La experiencia debe incluir al menos un paso",
+          400,
+        );
+      }
+
+      /*
+       * Normalizamos utilizando la validación existente,
+       * pero conservamos el id original cuando exista.
+       */
+      const normalizedSteps = normalizeRoutineSteps(steps).map(
+        (step, index) => ({
+          ...step,
+
+          id:
+            steps[index]?.id !== undefined && steps[index]?.id !== null
+              ? validatePositiveInteger(steps[index].id, "Paso")
+              : null,
+        }),
+      );
+
+      const existingIds = normalizedSteps
+        .filter((step) => step.id)
+        .map((step) => step.id);
+
+      /*
+       * Desactivamos los pasos que fueron eliminados
+       * desde el Builder.
+       *
+       * No los borramos físicamente para conservar
+       * historial y trazabilidad.
+       */
+      if (existingIds.length > 0) {
+        await client.query(
+          `
+          UPDATE "FloFlo".routine_step
+          SET
+            is_active = FALSE,
+            updated_at = NOW()
+          WHERE routine_id = $1
+            AND COALESCE(is_active, TRUE) = TRUE
+            AND NOT (id = ANY($2::BIGINT[]))
+          `,
+          [id, existingIds],
+        );
+      } else {
+        await client.query(
+          `
+          UPDATE "FloFlo".routine_step
+          SET
+            is_active = FALSE,
+            updated_at = NOW()
+          WHERE routine_id = $1
+            AND COALESCE(is_active, TRUE) = TRUE
+          `,
+          [id],
+        );
+      }
+
+      savedSteps = [];
+
+      for (const step of normalizedSteps) {
+        /*
+         * PASO EXISTENTE
+         */
+        if (step.id) {
+          const stepResult = await client.query(
+            `
+              UPDATE "FloFlo".routine_step
+              SET
+                title = $1,
+                description = $2,
+                icon = $3,
+                flocard_code = $4,
+                position = $5,
+                estimated_minutes = $6,
+                is_optional = $7,
+                is_active = TRUE,
+                updated_at = NOW()
+
+              WHERE id = $8
+                AND routine_id = $9
+
+              RETURNING *
+              `,
+            [
+              step.title,
+              step.description,
+              step.icon,
+              step.position,
+              step.estimatedMinutes,
+              step.isOptional,
+
+              step.id,
+              id,
+            ],
+          );
+
+          if (stepResult.rows.length === 0) {
+            throw createHttpError(
+              `El paso ${step.id} no pertenece a esta rutina`,
+              400,
+            );
+          }
+
+          savedSteps.push(stepResult.rows[0]);
+
+          continue;
+        }
+
+        /*
+         * PASO NUEVO
+         */
+        const stepResult = await client.query(
+          `
+            INSERT INTO "FloFlo".routine_step (
+              routine_id,
+              title,
+              description,
+              icon,
+              flocard_code,
+              position,
+              estimated_minutes,
+              is_optional,
+              is_active,
+              created_at,
+              updated_at
+            )
+           VALUES (
+              $1,
+              $2,
+              $3,
+              $4,
+              $5,
+              $6,
+              $7,
+              $8,
+              TRUE,
+              NOW(),
+              NOW()
+            )
+            RETURNING *
+            `,
+          [
+            id,
+            step.title,
+            step.description,
+            step.icon,
+            step.position,
+            step.estimatedMinutes,
+            step.isOptional,
+          ],
+        );
+
+        savedSteps.push(stepResult.rows[0]);
+      }
     }
+
+    /*
+     * Si el frontend no envió steps,
+     * devolvemos los pasos activos actuales.
+     */
+    if (savedSteps === null) {
+      const stepsResult = await client.query(
+        `
+          SELECT *
+          FROM "FloFlo".routine_step
+          WHERE routine_id = $1
+            AND COALESCE(is_active, TRUE) = TRUE
+          ORDER BY position ASC
+          `,
+        [id],
+      );
+
+      savedSteps = stepsResult.rows;
+    }
+
+    await client.query("COMMIT");
 
     return res.json({
       ...result.rows[0],
+
       learning_context_key: learningContext.context_key,
+
       learning_context_name: learningContext.name,
+
       learning_context_category: learningContext.category,
+
       learning_context_icon: learningContext.icon,
+
       learning_context_color: learningContext.color,
+
       learning_context_description: learningContext.description,
+
       managed_by_adult: isAdultManagingChild,
+
+      steps: savedSteps,
     });
   } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+
     console.error("Error actualizando rutina:", error);
 
     return res.status(error.statusCode || 500).json({
       message: error.message || "Error actualizando rutina",
     });
+  } finally {
+    client.release();
   }
 };
 

@@ -1,4 +1,5 @@
 const pool = require("../database/db");
+const { getFloCard } = require("../cognitive-engine/services/floCardService");
 
 const getExperienceCategories = async (req, res) => {
   try {
@@ -15,22 +16,17 @@ const getExperienceCategories = async (req, res) => {
     `);
 
     return res.json(result.rows);
-
   } catch (error) {
-
     console.error(error);
 
     return res.status(500).json({
-      message: "Error obteniendo categorías"
+      message: "Error obteniendo categorías",
     });
-
   }
 };
 
 const getExperienceTemplates = async (req, res) => {
-
   try {
-
     const result = await pool.query(`
       SELECT
     et.id,
@@ -85,17 +81,13 @@ const getExperienceTemplates = async (req, res) => {
     `);
 
     return res.json(result.rows);
-
   } catch (error) {
-
     console.error(error);
 
     return res.status(500).json({
-      message: "Error obteniendo experiencias"
+      message: "Error obteniendo experiencias",
     });
-
   }
-
 };
 
 const getExperienceTemplate = async (req, res) => {
@@ -143,6 +135,7 @@ const getExperienceTemplate = async (req, res) => {
               'title', ets.title,
               'description', ets.description,
               'icon', ets.icon,
+              'flocard_code', ets.flocard_code,
               'estimated_minutes', ets.estimated_minutes,
               'is_optional', ets.is_optional,
               'is_required', ets.is_required
@@ -185,7 +178,39 @@ const getExperienceTemplate = async (req, res) => {
       });
     }
 
-    return res.json(result.rows[0]);
+    const experience = result.rows[0];
+
+    const enrichedSteps = Array.isArray(experience.steps)
+      ? experience.steps.map((step) => {
+          const floCard = step.flocard_code
+            ? getFloCard(step.flocard_code)
+            : null;
+
+          return {
+            ...step,
+
+            flocard: floCard
+              ? {
+                  code: floCard.code,
+                  name: floCard.name,
+                  description: floCard.description,
+                  icon: floCard.icon,
+                  interaction_type: floCard.interaction_type,
+                  action: floCard.action,
+                  concepts: floCard.concepts,
+                  states: floCard.states,
+                  supports: floCard.supports,
+                  event_mapping: floCard.event_mapping,
+                }
+              : null,
+          };
+        })
+      : [];
+
+    return res.json({
+      ...experience,
+      steps: enrichedSteps,
+    });
   } catch (error) {
     console.error("Error obteniendo experiencia:", error);
 
@@ -195,8 +220,8 @@ const getExperienceTemplate = async (req, res) => {
   }
 };
 
-module.exports={
-    getExperienceCategories,
-    getExperienceTemplates,
-    getExperienceTemplate
+module.exports = {
+  getExperienceCategories,
+  getExperienceTemplates,
+  getExperienceTemplate,
 };
