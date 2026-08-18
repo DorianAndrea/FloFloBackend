@@ -299,7 +299,256 @@ const processRoutineCompletedEvidence = async ({
     evidences: results,
   };
 };
+const resolveEvidenceFromSupportLevel = (supportLevel) => {
+  switch (supportLevel) {
+    case "independent":
+      return {
+        result: EVIDENCE_RESULTS.POSITIVE,
+        confidence: 0.85,
+        difficultyLevel: null,
+      };
+
+    case "verbal":
+    case "visual":
+      return {
+        result: EVIDENCE_RESULTS.PARTIAL,
+        confidence: 0.78,
+        difficultyLevel: "low",
+      };
+
+    case "gestural":
+      return {
+        result: EVIDENCE_RESULTS.PARTIAL,
+        confidence: 0.75,
+        difficultyLevel: "low",
+      };
+
+    case "physical_partial":
+      return {
+        result: EVIDENCE_RESULTS.DIFFICULTY,
+        confidence: 0.65,
+        difficultyLevel: "moderate",
+      };
+
+    case "physical_total":
+      return {
+        result: EVIDENCE_RESULTS.DIFFICULTY,
+        confidence: 0.55,
+        difficultyLevel: "high",
+      };
+
+    default:
+      return {
+        result: EVIDENCE_RESULTS.POSITIVE,
+        confidence: 0.75,
+        difficultyLevel: null,
+      };
+  }
+};
+
+const processFloCardCompletedEvidence = async ({
+  event,
+  client,
+  processorVersion,
+}) => {
+  validateEvent(event);
+
+  if (
+    ![
+      COGNITIVE_EVENT_TYPES.FLOCARD_COMPLETED,
+      COGNITIVE_EVENT_TYPES.ROUTINE_STEP_COMPLETED,
+    ].includes(event.event_type)
+  ) {
+    throw createEvidenceError(
+      `El Evidence Engine recibió un evento incorrecto: ${event.event_type}`,
+      "INVALID_FLOCARD_EVENT",
+    );
+  }
+
+  if (!client) {
+    throw createEvidenceError(
+      "La conexión de base de datos es obligatoria",
+      "MISSING_DATABASE_CLIENT",
+    );
+  }
+
+  const concepts = await getEventConcepts(client, event.id);
+
+  if (concepts.length === 0) {
+    throw createEvidenceError(
+      "El evento FloCard no tiene conceptos cognitivos asociados",
+      "EVENT_WITHOUT_CONCEPTS",
+    );
+  }
+
+  const context = event.context || {};
+  const payload = event.payload || {};
+  const metadata = event.metadata || {};
+
+  const supportLevel = payload.supportLevel || null;
+
+  /*
+   * Completar una FloCard es evidencia conductual positiva.
+   *
+   * No equivale todavía a dominio del concepto.
+   * Por eso mantenemos una confianza inicial moderada.
+   */
+  const {
+    result: evidenceResultType,
+    confidence,
+    difficultyLevel,
+  } = resolveEvidenceFromSupportLevel(supportLevel);
+
+  const results = [];
+
+  for (const concept of concepts) {
+    const existingEvidence = await findExistingEvidence(
+      client,
+      event.id,
+      concept.concept_id,
+    );
+
+    if (existingEvidence) {
+      results.push({
+        conceptId: concept.concept_id,
+        conceptCode: concept.code,
+        relevanceWeight: Number(concept.relevance_weight || 1),
+        evidenceId: existingEvidence.id,
+        created: false,
+        duplicate: true,
+      });
+
+      continue;
+    }
+
+    const evidenceValue = Number(concept.relevance_weight || 1);
+
+    const details = {
+      eventType: event.event_type,
+
+      concept: {
+        id: concept.concept_id,
+        code: concept.code,
+        name: concept.name,
+        relevanceWeight: evidenceValue,
+      },
+
+      actor: {
+        userId: event.actor_user_id || null,
+        source: context.source || null,
+        accessProfile: context.accessProfile || null,
+        relationshipKey: context.relationshipKey || null,
+      },
+
+      floCard: {
+        code: context.floCardCode || null,
+        stepId: context.stepId || null,
+        stepTitle: context.stepTitle || null,
+        stepPosition: context.stepPosition || null,
+      },
+
+      routine: {
+        id: context.routineId || null,
+        name: context.routineName || null,
+      },
+
+      completion: {
+        completed: Boolean(payload.completed),
+        supportLevel,
+        notes: payload.notes || null,
+      },
+
+      processing: {
+        processorVersion,
+      },
+
+      originalContext: context,
+      originalPayload: payload,
+      originalMetadata: metadata,
+    };
+
+    const evidenceResult = await client.query(
+      `
+      INSERT INTO "FloFlo".cognitive_evidence (
+        event_id,
+        child_id,
+        concept_id,
+        evidence_source,
+        evidence_type,
+        result,
+        evidence_value,
+        confidence,
+        support_level,
+        difficulty_level,
+        context_key,
+        details,
+        occurred_at,
+        created_at
+      )
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11,
+        $12::jsonb,
+        $13,
+        NOW()
+      )
+      RETURNING *
+      `,
+      [
+        event.id,
+        event.child_id,
+        concept.concept_id,
+
+        EVIDENCE_SOURCES.BEHAVIORAL,
+        EVIDENCE_TYPES.FLOCARD_COMPLETION,
+        evidenceResultType,
+
+        evidenceValue,
+        confidence,
+
+        supportLevel,
+        difficultyLevel,
+
+        String(context.learningContext?.key || "unspecified")
+          .trim()
+          .toLowerCase(),
+        JSON.stringify(details),
+        event.occurred_at || new Date(),
+      ],
+    );
+
+    results.push({
+      conceptId: concept.concept_id,
+      conceptCode: concept.code,
+      relevanceWeight: evidenceValue,
+      evidenceId: evidenceResult.rows[0]?.id || null,
+      created: true,
+      duplicate: false,
+    });
+  }
+
+  return {
+    eventId: event.id,
+    eventType: event.event_type,
+    childId: event.child_id,
+    floCardCode: context.floCardCode || null,
+    conceptsProcessed: concepts.length,
+    evidencesCreated: results.filter((item) => item.created).length,
+    duplicatesSkipped: results.filter((item) => item.duplicate).length,
+    evidences: results,
+  };
+};
 
 module.exports = {
   processRoutineCompletedEvidence,
+  processFloCardCompletedEvidence,
 };

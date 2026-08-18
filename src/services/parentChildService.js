@@ -42,11 +42,15 @@ const createHttpError = (message, statusCode = 400) => {
 };
 
 const normalizeEmail = (email) => {
-  return String(email || "").trim().toLowerCase();
+  return String(email || "")
+    .trim()
+    .toLowerCase();
 };
 
 const normalizeCode = (code) => {
-  return String(code || "").replace(/\s+/g, "").trim();
+  return String(code || "")
+    .replace(/\s+/g, "")
+    .trim();
 };
 
 const validatePositiveInteger = (value, label = "ID") => {
@@ -101,11 +105,14 @@ const getChildrenByParent = async (parentId) => {
     `
     SELECT
       c.id,
-      c."firstName",
-      c."lastName",
-      c.email,
-      c.avatar,
-      c.role,
+
+      c.first_name AS "firstName",
+      c.last_name AS "lastName",
+      c.birth_date AS "birthDate",
+      c.avatar_url AS avatar,
+
+      NULL::text AS email,
+      'child'::text AS role,
 
       pc.relationship_key,
       pc.access_profile,
@@ -115,19 +122,185 @@ const getChildrenByParent = async (parentId) => {
 
     FROM "FloFlo".parent_child pc
 
-    JOIN "FloFlo"."user" c
+    JOIN "FloFlo".child_profile c
       ON c.id = pc.child_id
 
     WHERE pc.parent_id = $1
-      AND c.role = 'child'
       AND pc.status = 'active'
+      AND c.status = 'active'
 
-    ORDER BY c."firstName" ASC
+    ORDER BY c.first_name ASC
     `,
     [cleanParentId],
   );
 
   return result.rows;
+};
+
+const createChildProfile = async ({
+  parentId,
+  firstName,
+  lastName,
+  birthDate,
+  avatarUrl,
+}) => {
+  const cleanParentId = validatePositiveInteger(parentId, "Cuidador");
+
+  const cleanFirstName = String(firstName || "").trim();
+  const cleanLastName = String(lastName || "").trim() || null;
+  const cleanBirthDate = birthDate || null;
+  const cleanAvatarUrl = String(avatarUrl || "").trim() || null;
+
+  if (!cleanFirstName) {
+    throw createHttpError("El nombre del niño/a es obligatorio", 400);
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    /*
+     * Verificamos que quien está creando el perfil
+     * sea realmente una cuenta adulta válida.
+     */
+    const parentResult = await client.query(
+      `
+      SELECT
+        id,
+        "firstName",
+        "lastName",
+        email,
+        role
+      FROM "FloFlo"."user"
+      WHERE id = $1
+        AND role = 'parent'
+      LIMIT 1
+      `,
+      [cleanParentId],
+    );
+
+    if (parentResult.rows.length === 0) {
+      throw createHttpError("No se encontró una cuenta cuidadora válida", 404);
+    }
+
+    /*
+     * Creamos el perfil infantil.
+     *
+     * Importante:
+     * NO se crea user.
+     * NO se crea email.
+     * NO se crea contraseña.
+     */
+    const childResult = await client.query(
+      `
+      INSERT INTO "FloFlo".child_profile
+      (
+        first_name,
+        last_name,
+        birth_date,
+        avatar_url,
+        created_by,
+        status,
+        created_at,
+        updated_at
+      )
+      VALUES
+      (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        'active',
+        NOW(),
+        NOW()
+      )
+
+      RETURNING
+        id,
+        first_name AS "firstName",
+        last_name AS "lastName",
+        birth_date AS "birthDate",
+        avatar_url AS avatar,
+        created_by AS "createdBy",
+        status,
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+      `,
+      [
+        cleanFirstName,
+        cleanLastName,
+        cleanBirthDate,
+        cleanAvatarUrl,
+        cleanParentId,
+      ],
+    );
+
+    const child = childResult.rows[0];
+
+    /*
+     * El adulto que crea el perfil queda automáticamente
+     * como cuidador principal.
+     */
+    const relationshipResult = await client.query(
+      `
+      INSERT INTO "FloFlo".parent_child
+      (
+        parent_id,
+        child_id,
+        relationship_key,
+        access_profile,
+        can_manage_team,
+        invited_by,
+        accepted_at,
+        status,
+        created_at
+      )
+      VALUES
+      (
+        $1,
+        $2,
+        'primary_caregiver',
+        'primary_caregiver',
+        TRUE,
+        NULL,
+        NOW(),
+        'active',
+        NOW()
+      )
+
+      RETURNING
+        id,
+        parent_id,
+        child_id,
+        relationship_key,
+        access_profile,
+        can_manage_team,
+        accepted_at,
+        status,
+        created_at
+      `,
+      [cleanParentId, child.id],
+    );
+
+    await client.query("COMMIT");
+
+    return {
+      ...child,
+
+      // Compatibilidad temporal con el frontend antiguo
+      email: null,
+      role: "child",
+
+      relationship: relationshipResult.rows[0],
+    };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 /* -------------------------------------------------------------------------- */
@@ -197,10 +370,7 @@ const linkChildToParent = async (parentId, childEmail, linkCode) => {
   const normalizedCode = normalizeCode(linkCode);
 
   if (!normalizedEmail || !normalizedCode) {
-    throw createHttpError(
-      "Debes ingresar correo del niño/a y código",
-      400,
-    );
+    throw createHttpError("Debes ingresar correo del niño/a y código", 400);
   }
 
   if (!/^\d{6}$/.test(normalizedCode)) {
@@ -233,10 +403,7 @@ const linkChildToParent = async (parentId, childEmail, linkCode) => {
     const child = childResult.rows[0];
 
     if (cleanParentId === Number(child.id)) {
-      throw createHttpError(
-        "Un cuidador no puede asociarse a sí mismo",
-        400,
-      );
+      throw createHttpError("Un cuidador no puede asociarse a sí mismo", 400);
     }
 
     const codeHash = hashLinkCode(child.id, normalizedCode);
@@ -280,9 +447,7 @@ const linkChildToParent = async (parentId, childEmail, linkCode) => {
       ? "primary_caregiver"
       : "caregiver";
 
-    const accessProfile = isFirstTeamMember
-      ? "primary_caregiver"
-      : "caregiver";
+    const accessProfile = isFirstTeamMember ? "primary_caregiver" : "caregiver";
 
     const canManageTeam = isFirstTeamMember;
 
@@ -310,13 +475,7 @@ const linkChildToParent = async (parentId, childEmail, linkCode) => {
 
       RETURNING *
       `,
-      [
-        cleanParentId,
-        child.id,
-        relationshipKey,
-        accessProfile,
-        canManageTeam,
-      ],
+      [cleanParentId, child.id, relationshipKey, accessProfile, canManageTeam],
     );
 
     await client.query(
@@ -347,7 +506,6 @@ const linkChildToParent = async (parentId, childEmail, linkCode) => {
 /* -------------------------------------------------------------------------- */
 /* AUTORIZACIÓN                                                               */
 /* -------------------------------------------------------------------------- */
-
 const isChildLinkedToParent = async (parentId, childId) => {
   const cleanParentId = validatePositiveInteger(parentId, "Cuidador");
   const cleanChildId = validatePositiveInteger(childId, "Niño/a");
@@ -355,15 +513,16 @@ const isChildLinkedToParent = async (parentId, childId) => {
   const result = await pool.query(
     `
     SELECT 1
+
     FROM "FloFlo".parent_child pc
 
-    JOIN "FloFlo"."user" c
+    JOIN "FloFlo".child_profile c
       ON c.id = pc.child_id
 
     WHERE pc.parent_id = $1
       AND pc.child_id = $2
       AND pc.status = 'active'
-      AND c.role = 'child'
+      AND c.status = 'active'
 
     LIMIT 1
     `,
@@ -377,10 +536,7 @@ const assertChildBelongsToParent = async (parentId, childId) => {
   const linked = await isChildLinkedToParent(parentId, childId);
 
   if (!linked) {
-    throw createHttpError(
-      "No tienes permiso para acceder a este niño/a",
-      403,
-    );
+    throw createHttpError("No tienes permiso para acceder a este niño/a", 403);
   }
 
   return true;
@@ -425,10 +581,7 @@ const assertCanManageTeam = async (parentId, childId) => {
 /* -------------------------------------------------------------------------- */
 
 const getSupportTeam = async (requesterId, childId) => {
-  const cleanRequesterId = validatePositiveInteger(
-    requesterId,
-    "Cuidador",
-  );
+  const cleanRequesterId = validatePositiveInteger(requesterId, "Cuidador");
 
   const cleanChildId = validatePositiveInteger(childId, "Niño/a");
 
@@ -491,13 +644,13 @@ const createSupportTeamInvitation = async ({
   const cleanChildId = validatePositiveInteger(childId, "Niño/a");
   const cleanEmail = normalizeEmail(email);
 
-  const cleanRelationshipKey =
-    validateRelationshipKey(relationshipKey);
+  const cleanRelationshipKey = validateRelationshipKey(relationshipKey);
 
-  const accessProfile =
-    RELATIONSHIP_PROFILES[cleanRelationshipKey];
+  const accessProfile = RELATIONSHIP_PROFILES[cleanRelationshipKey];
 
-  const cleanMessage = String(message || "").trim().slice(0, 1000);
+  const cleanMessage = String(message || "")
+    .trim()
+    .slice(0, 1000);
 
   if (!cleanEmail) {
     throw createHttpError(
@@ -515,12 +668,19 @@ const createSupportTeamInvitation = async ({
 
     const childResult = await client.query(
       `
-      SELECT id, "firstName", "lastName", email
-      FROM "FloFlo"."user"
-      WHERE id = $1
-        AND role = 'child'
-      LIMIT 1
-      `,
+  SELECT
+    id,
+    first_name AS "firstName",
+    last_name AS "lastName",
+    avatar_url AS avatar
+
+  FROM "FloFlo".child_profile
+
+  WHERE id = $1
+    AND status = 'active'
+
+  LIMIT 1
+  `,
       [cleanChildId],
     );
 
@@ -702,17 +862,17 @@ const getSupportTeamInvitationByToken = async (token) => {
       sti.status,
       sti.created_at,
 
-      child."firstName" AS child_first_name,
-      child."lastName" AS child_last_name,
-      child.avatar AS child_avatar,
+      child.first_name AS child_first_name,
+      child.last_name AS child_last_name,
+      child.avatar_url AS child_avatar,
 
       inviter."firstName" AS inviter_first_name,
       inviter."lastName" AS inviter_last_name
 
     FROM "FloFlo".support_team_invitation sti
 
-    JOIN "FloFlo"."user" child
-      ON child.id = sti.child_id
+    JOIN "FloFlo".child_profile child
+    ON child.id = sti.child_id
 
     JOIN "FloFlo"."user" inviter
       ON inviter.id = sti.invited_by
@@ -742,10 +902,7 @@ const getSupportTeamInvitationByToken = async (token) => {
   }
 
   if (invitation.status === "accepted") {
-    throw createHttpError(
-      "La invitación ya fue aceptada",
-      409,
-    );
+    throw createHttpError("La invitación ya fue aceptada", 409);
   }
 
   return invitation;
@@ -801,10 +958,7 @@ const acceptSupportTeamInvitation = async ({
     const invitation = invitationResult.rows[0];
 
     if (invitation.status !== "pending") {
-      throw createHttpError(
-        "La invitación ya no está disponible",
-        409,
-      );
+      throw createHttpError("La invitación ya no está disponible", 409);
     }
 
     if (new Date(invitation.expires_at) <= new Date()) {
@@ -820,9 +974,7 @@ const acceptSupportTeamInvitation = async ({
       throw createHttpError("La invitación ha expirado", 410);
     }
 
-    if (
-      normalizeEmail(invitation.email) !== cleanUserEmail
-    ) {
+    if (normalizeEmail(invitation.email) !== cleanUserEmail) {
       throw createHttpError(
         "Debes iniciar sesión con el correo que recibió la invitación",
         403,
@@ -908,17 +1060,11 @@ const cancelSupportTeamInvitation = async ({
   childId,
   invitationId,
 }) => {
-  const cleanRequesterId = validatePositiveInteger(
-    requesterId,
-    "Cuidador",
-  );
+  const cleanRequesterId = validatePositiveInteger(requesterId, "Cuidador");
 
   const cleanChildId = validatePositiveInteger(childId, "Niño/a");
 
-  const cleanInvitationId = validatePositiveInteger(
-    invitationId,
-    "Invitación",
-  );
+  const cleanInvitationId = validatePositiveInteger(invitationId, "Invitación");
 
   await assertCanManageTeam(cleanRequesterId, cleanChildId);
 
@@ -948,22 +1094,12 @@ const cancelSupportTeamInvitation = async ({
 /* QUITAR INTEGRANTE                                                          */
 /* -------------------------------------------------------------------------- */
 
-const removeSupportTeamMember = async ({
-  requesterId,
-  childId,
-  memberId,
-}) => {
-  const cleanRequesterId = validatePositiveInteger(
-    requesterId,
-    "Cuidador",
-  );
+const removeSupportTeamMember = async ({ requesterId, childId, memberId }) => {
+  const cleanRequesterId = validatePositiveInteger(requesterId, "Cuidador");
 
   const cleanChildId = validatePositiveInteger(childId, "Niño/a");
 
-  const cleanMemberId = validatePositiveInteger(
-    memberId,
-    "Integrante",
-  );
+  const cleanMemberId = validatePositiveInteger(memberId, "Integrante");
 
   await assertCanManageTeam(cleanRequesterId, cleanChildId);
 
@@ -987,10 +1123,7 @@ const removeSupportTeamMember = async ({
   );
 
   if (memberResult.rows.length === 0) {
-    throw createHttpError(
-      "No se encontró el integrante del equipo",
-      404,
-    );
+    throw createHttpError("No se encontró el integrante del equipo", 404);
   }
 
   const member = memberResult.rows[0];
@@ -1021,6 +1154,9 @@ const removeSupportTeamMember = async ({
 
 module.exports = {
   getChildrenByParent,
+  createChildProfile,
+
+  // Legacy temporal
   createChildLinkCode,
   linkChildToParent,
 

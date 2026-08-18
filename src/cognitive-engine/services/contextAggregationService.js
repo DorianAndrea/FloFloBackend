@@ -52,35 +52,51 @@ const calculateContextSummary = async ({
       COUNT(*)::INTEGER AS exposure_count,
 
       COUNT(*) FILTER (
-        WHERE result = 'positive'
+        WHERE ce.result = 'positive'
       )::INTEGER AS success_count,
 
       COUNT(*) FILTER (
-        WHERE result = 'partial'
+        WHERE ce.result = 'partial'
       )::INTEGER AS partial_count,
 
       COUNT(*) FILTER (
-        WHERE result IN ('difficulty', 'negative')
+        WHERE ce.result IN ('difficulty', 'negative')
       )::INTEGER AS difficulty_count,
 
-      MIN(occurred_at) AS first_observed_at,
-      MAX(occurred_at) AS last_observed_at,
+      MIN(ce.occurred_at) AS first_observed_at,
+      MAX(ce.occurred_at) AS last_observed_at,
 
-     MAX(
-      COALESCE(
-      details #>> '{learningContext,name}',
-      details #>> '{routine,name}',
-      details #>> '{place,name}',
-      details #>> '{conversation,name}',
-      context_key
-      )
-    ) AS context_label
+      MAX(
+        COALESCE(
+          lc.name,
 
-    FROM "FloFlo".cognitive_evidence
+          CASE
+            WHEN ce.context_key LIKE 'routine:%'
+              THEN ce.details #>> '{routine,name}'
 
-    WHERE child_id = $1
-      AND concept_id = $2
-      AND context_key = $3
+            WHEN ce.context_key LIKE 'place:%'
+              THEN ce.details #>> '{place,name}'
+
+            WHEN ce.context_key LIKE 'conversation:%'
+              THEN ce.details #>> '{conversation,name}'
+
+            ELSE NULL
+          END,
+
+          ce.details #>> '{learningContext,name}',
+          ce.context_key
+        )
+      ) AS context_label
+
+    FROM "FloFlo".cognitive_evidence ce
+
+    LEFT JOIN "FloFlo".learning_context lc
+      ON lc.context_key = ce.context_key
+      AND lc.is_active = TRUE
+
+    WHERE ce.child_id = $1
+      AND ce.concept_id = $2
+      AND ce.context_key = $3
     `,
     [childId, conceptId, contextKey],
   );

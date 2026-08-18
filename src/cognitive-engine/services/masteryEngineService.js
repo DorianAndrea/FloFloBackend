@@ -99,29 +99,37 @@ const recalculateConceptMastery = async ({
       )::int AS positive_evidence_count,
 
       COUNT(*) FILTER (
-        WHERE result = 'negative'
-      )::int AS negative_evidence_count,
+  WHERE result = 'negative'
+)::int AS negative_evidence_count,
 
-      COALESCE(
-        AVG(evidence_value),
-        0
-      )::numeric AS mastery_score,
+COUNT(*) FILTER (
+  WHERE result = 'partial'
+)::int AS partial_evidence_count,
+
+COUNT(*) FILTER (
+  WHERE result = 'difficulty'
+)::int AS difficulty_evidence_count,
+
+COALESCE(
+  AVG(
+    evidence_value *
+    CASE
+      WHEN result = 'positive' THEN 1.00
+      WHEN result = 'partial' THEN 0.65
+      WHEN result = 'difficulty' THEN 0.30
+      WHEN result = 'negative' THEN 0.00
+      WHEN result = 'neutral' THEN 0.50
+      WHEN result = 'inconclusive' THEN 0.50
+      ELSE 0.50
+    END
+  ),
+  0
+)::numeric AS mastery_score,
 
       COALESCE(
         AVG(confidence),
         0
       )::numeric AS confidence,
-
-      COUNT(
-        DISTINCT NULLIF(context_key, '')
-      )::int AS context_count,
-
-      COUNT(
-        DISTINCT CASE
-          WHEN result = 'positive'
-          THEN NULLIF(context_key, '')
-        END
-      )::int AS successful_context_count,
 
       MIN(occurred_at) AS first_evidence_at,
       MAX(occurred_at) AS last_evidence_at
@@ -136,6 +144,35 @@ const recalculateConceptMastery = async ({
 
   const stats = evidenceResult.rows[0];
 
+  const contextResult = await client.query(
+    `
+  SELECT
+    COUNT(*)::int AS context_count,
+
+    COUNT(*) FILTER (
+      WHERE ccc.exposure_count >= 2
+        AND ccc.success_count >= 2
+        AND (
+          ccc.success_count::numeric /
+          NULLIF(ccc.exposure_count, 0)
+        ) >= 0.70
+    )::int AS successful_context_count
+
+  FROM "FloFlo".child_concept_context ccc
+
+  JOIN "FloFlo".learning_context lc
+    ON lc.context_key = ccc.context_key
+    AND lc.is_active = TRUE
+
+  WHERE ccc.child_id = $1
+    AND ccc.concept_id = $2
+    AND ccc.context_key <> 'unspecified'
+  `,
+    [childId, conceptId],
+  );
+
+  const contextStats = contextResult.rows[0];
+
   const masteryScore = Number(stats.mastery_score || 0);
 
   const confidence = Number(stats.confidence || 0);
@@ -146,9 +183,15 @@ const recalculateConceptMastery = async ({
 
   const negativeEvidenceCount = Number(stats.negative_evidence_count || 0);
 
-  const contextCount = Number(stats.context_count || 0);
+  const partialEvidenceCount = Number(stats.partial_evidence_count || 0);
 
-  const successfulContextCount = Number(stats.successful_context_count || 0);
+  const difficultyEvidenceCount = Number(stats.difficulty_evidence_count || 0);
+
+  const contextCount = Number(contextStats.context_count || 0);
+
+  const successfulContextCount = Number(
+    contextStats.successful_context_count || 0,
+  );
 
   const masteryLevel = resolveMasteryLevel({
     masteryScore,
@@ -205,7 +248,7 @@ const recalculateConceptMastery = async ({
       $12,
       NOW(),
 
-      '1.1.0',
+      '1.3.0',
       $13::jsonb,
 
       NOW(),
@@ -264,14 +307,35 @@ const recalculateConceptMastery = async ({
       stats.last_evidence_at,
 
       JSON.stringify({
-        method: "evidence_context_mastery_v1",
+        method: "weighted_evidence_context_mastery_v2",
+
         score: masteryScore,
         confidence,
+
         evidenceCount,
+
         positiveEvidenceCount,
+        partialEvidenceCount,
+        difficultyEvidenceCount,
         negativeEvidenceCount,
+
         contextCount,
         successfulContextCount,
+
+        evidenceWeights: {
+          positive: 1.0,
+          partial: 0.65,
+          difficulty: 0.3,
+          negative: 0.0,
+          neutral: 0.5,
+          inconclusive: 0.5,
+        },
+
+        successfulContextRule: {
+          minExposureCount: 2,
+          minSuccessCount: 2,
+          minSuccessRatio: 0.7,
+        },
       }),
     ],
   );

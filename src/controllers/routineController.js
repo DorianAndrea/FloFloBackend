@@ -14,6 +14,8 @@ const {
   COGNITIVE_EVENT_TYPES,
 } = require("../cognitive-engine/constants/cognitiveEventTypes");
 
+const { getFloCard } = require("../cognitive-engine/services/floCardService");
+
 const ALL_DAYS = [
   "monday",
   "tuesday",
@@ -191,6 +193,9 @@ const normalizeRoutineSteps = (steps) => {
 };
 
 const getAdultChildAccess = async (adultId, childId, client = pool) => {
+  const cleanAdultId = validatePositiveInteger(adultId, "Adulto");
+  const cleanChildId = validatePositiveInteger(childId, "Niño/a");
+
   const result = await client.query(
     `
     SELECT
@@ -202,17 +207,17 @@ const getAdultChildAccess = async (adultId, childId, client = pool) => {
 
     FROM "FloFlo".parent_child pc
 
-    INNER JOIN "FloFlo"."user" child
+    INNER JOIN "FloFlo".child_profile child
       ON child.id = pc.child_id
 
     WHERE pc.parent_id = $1
       AND pc.child_id = $2
       AND pc.status = 'active'
-      AND child.role = 'child'
+      AND child.status = 'active'
 
     LIMIT 1
     `,
-    [adultId, childId],
+    [cleanAdultId, cleanChildId],
   );
 
   if (result.rows.length === 0) {
@@ -1097,6 +1102,7 @@ const updateRoutine = async (req, res) => {
               step.title,
               step.description,
               step.icon,
+              step.flocardCode ?? step.flocard_code ?? null,
               step.position,
               step.estimatedMinutes,
               step.isOptional,
@@ -1121,46 +1127,57 @@ const updateRoutine = async (req, res) => {
         /*
          * PASO NUEVO
          */
+        const stepInsertValues = [
+          id,
+          step.title,
+          step.description,
+          step.icon,
+          step.flocard_code ?? null,
+          step.position,
+          step.estimatedMinutes,
+          step.isOptional,
+        ];
+
+        console.log("🧩 INSERT STEP DEBUG:", {
+          valuesLength: stepInsertValues.length,
+          values: stepInsertValues,
+          step,
+        });
+
         const stepResult = await client.query(
           `
-            INSERT INTO "FloFlo".routine_step (
-              routine_id,
-              title,
-              description,
-              icon,
-              flocard_code,
-              position,
-              estimated_minutes,
-              is_optional,
-              is_active,
-              created_at,
-              updated_at
-            )
-           VALUES (
-              $1,
-              $2,
-              $3,
-              $4,
-              $5,
-              $6,
-              $7,
-              $8,
-              TRUE,
-              NOW(),
-              NOW()
-            )
-            RETURNING *
-            `,
-          [
-            id,
-            step.title,
-            step.description,
-            step.icon,
-            step.position,
-            step.estimatedMinutes,
-            step.isOptional,
-          ],
+  INSERT INTO "FloFlo".routine_step (
+    routine_id,
+    title,
+    description,
+    icon,
+    flocard_code,
+    position,
+    estimated_minutes,
+    is_optional,
+    is_active,
+    created_at,
+    updated_at
+  )
+  VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    TRUE,
+    NOW(),
+    NOW()
+  )
+  RETURNING *
+  `,
+          stepInsertValues,
         );
+
+        savedSteps.push(stepResult.rows[0]);
 
         savedSteps.push(stepResult.rows[0]);
       }
@@ -1329,11 +1346,20 @@ const completeRoutineStep = async (req, res) => {
       SELECT
         r.id AS routine_id,
         r.name AS routine_name,
+        r.experience_template_id,
+
+        lc.id AS learning_context_id,
+        lc.context_key AS learning_context_key,
+        lc.name AS learning_context_name,
+        lc.category AS learning_context_category,
+        lc.icon AS learning_context_icon,
+        lc.color AS learning_context_color,
 
         rs.id AS step_id,
         rs.title AS step_title,
         rs.position,
         rs.icon,
+        rs.flocard_code,
         rs.is_optional
 
       FROM "FloFlo".routine r
@@ -1341,6 +1367,9 @@ const completeRoutineStep = async (req, res) => {
       INNER JOIN "FloFlo".routine_step rs
         ON rs.routine_id = r.id
         AND COALESCE(rs.is_active, true) = true
+
+      LEFT JOIN "FloFlo".learning_context lc
+        ON lc.id = r.learning_context_id
 
       WHERE r.id = $1
         AND r.user_id = $2
@@ -1444,6 +1473,101 @@ const completeRoutineStep = async (req, res) => {
       ],
     );
 
+    const stepProgress = progressResult.rows[0];
+
+    let stepConceptCodes = [];
+
+    if (routineStep.flocard_code) {
+      const floCard = getFloCard(routineStep.flocard_code);
+
+      if (floCard) {
+        stepConceptCodes = Array.isArray(floCard.concepts)
+          ? floCard.concepts
+          : [];
+      }
+    }
+
+    if (stepConceptCodes.length === 0 && routineStep.experience_template_id) {
+      const templateResult = await client.query(
+        `
+    SELECT code
+    FROM "FloFlo".experience_template
+    WHERE id = $1
+      AND is_active = TRUE
+    LIMIT 1
+    `,
+        [routineStep.experience_template_id],
+      );
+
+      const templateCode = templateResult.rows[0]?.code || null;
+
+      if (templateCode) {
+        const concepts = getConceptsForExperience(templateCode);
+
+        stepConceptCodes = concepts.map((concept) => concept.code);
+      }
+    }
+
+    if (stepConceptCodes.length > 0) {
+      await publishLearningEvent(
+        {
+          idempotencyKey: `routine_step_progress:${stepProgress.id}:completed`,
+
+          eventType: COGNITIVE_EVENT_TYPES.ROUTINE_STEP_COMPLETED,
+
+          childId: ownerId,
+          actorUserId: actorId,
+
+          sourceModule: "routines",
+
+          sourceEntityType: "routine_step_progress",
+          sourceEntityId: stepProgress.id,
+
+          conceptCodes: stepConceptCodes,
+
+          context: {
+            routineId,
+            routineName: routineStep.routine_name,
+
+            stepId: routineStep.step_id,
+            stepTitle: routineStep.step_title,
+            stepPosition: routineStep.position,
+
+            floCardCode: routineStep.flocard_code || null,
+
+            learningContext: {
+              id: routineStep.learning_context_id,
+              key: routineStep.learning_context_key || "unspecified",
+              name: routineStep.learning_context_name || "Sin especificar",
+              category: routineStep.learning_context_category || "environment",
+              icon: routineStep.learning_context_icon || null,
+              color: routineStep.learning_context_color || null,
+            },
+
+            source,
+            accessProfile,
+            relationshipKey,
+          },
+
+          payload: {
+            completed: true,
+
+            supportLevel: stepProgress.support_level || null,
+
+            notes: stepProgress.notes || null,
+          },
+
+          metadata: {
+            managedByAdult: isAdultManagingChild,
+            engineVersion: "1.0.0",
+          },
+
+          occurredAt: stepProgress.completed_at,
+        },
+        client,
+      );
+    }
+
     await client.query("COMMIT");
 
     return res.status(200).json({
@@ -1452,7 +1576,7 @@ const completeRoutineStep = async (req, res) => {
       managedByAdult: isAdultManagingChild,
 
       step: routineStep,
-      progress: progressResult.rows[0],
+      progress: stepProgress,
     });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
@@ -1461,6 +1585,192 @@ const completeRoutineStep = async (req, res) => {
 
     return res.status(error.statusCode || 500).json({
       message: error.message || "No se pudo completar el paso",
+    });
+  } finally {
+    client.release();
+  }
+};
+
+const startRoutineStepFloCard = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const {
+      ownerId,
+      actorId,
+      isAdultManagingChild,
+      source,
+      accessProfile,
+      relationshipKey,
+    } = await resolveRoutineOwnerId(req, client);
+
+    const routineId = validatePositiveInteger(req.params.routineId, "Rutina");
+
+    const stepId = validatePositiveInteger(req.params.stepId, "Paso");
+
+    /*
+     * Verifica que:
+     * - la rutina pertenece al niño/a;
+     * - el paso pertenece a la rutina;
+     * - el paso tiene una FloCard;
+     * - recuperamos también el contexto de aprendizaje.
+     */
+    const stepResult = await client.query(
+      `
+      SELECT
+        r.id AS routine_id,
+        r.name AS routine_name,
+        r.experience_template_id,
+
+        lc.id AS learning_context_id,
+        lc.context_key AS learning_context_key,
+        lc.name AS learning_context_name,
+        lc.category AS learning_context_category,
+        lc.icon AS learning_context_icon,
+        lc.color AS learning_context_color,
+
+        rs.id AS step_id,
+        rs.title AS step_title,
+        rs.position,
+        rs.icon,
+        rs.flocard_code,
+        rs.is_optional
+
+      FROM "FloFlo".routine r
+
+      INNER JOIN "FloFlo".routine_step rs
+        ON rs.routine_id = r.id
+        AND COALESCE(rs.is_active, TRUE) = TRUE
+
+      LEFT JOIN "FloFlo".learning_context lc
+        ON lc.id = r.learning_context_id
+
+      WHERE r.id = $1
+        AND r.user_id = $2
+        AND rs.id = $3
+        AND COALESCE(r.is_active, TRUE) = TRUE
+
+      LIMIT 1
+      `,
+      [routineId, ownerId, stepId],
+    );
+
+    if (stepResult.rows.length === 0) {
+      throw createHttpError("El paso no pertenece a esta rutina", 404);
+    }
+
+    const routineStep = stepResult.rows[0];
+
+    if (!routineStep.flocard_code) {
+      throw createHttpError("Este paso no tiene una FloCard asociada", 400);
+    }
+
+    /*
+     * Obtiene la definición oficial de la FloCard.
+     */
+    const floCard = getFloCard(routineStep.flocard_code);
+
+    if (!floCard) {
+      throw createHttpError(
+        `FloCard no encontrada: ${routineStep.flocard_code}`,
+        400,
+      );
+    }
+
+    /*
+     * FLOCARD_STARTED representa interacción/exposición.
+     *
+     * No estamos marcando el paso como completado
+     * ni creando routine_step_progress.
+     */
+    const startedAt = new Date();
+
+    const { dateString } = getTodayInfo();
+
+    const eventResult = await publishLearningEvent(
+      {
+        /*
+         * Una FloCard puede iniciarse nuevamente otro día.
+         * La fecha evita bloquear para siempre futuros inicios.
+         */
+        idempotencyKey: `routine_step:${stepId}:flocard_started:${dateString}`,
+
+        eventType: COGNITIVE_EVENT_TYPES.FLOCARD_STARTED,
+
+        childId: ownerId,
+        actorUserId: actorId,
+
+        sourceModule: "routines",
+
+        sourceEntityType: "routine_step",
+        sourceEntityId: stepId,
+
+        conceptCodes: Array.isArray(floCard.concepts) ? floCard.concepts : [],
+
+        context: {
+          routineId,
+          routineName: routineStep.routine_name,
+
+          stepId: routineStep.step_id,
+          stepTitle: routineStep.step_title,
+          stepPosition: routineStep.position,
+
+          floCardCode: routineStep.flocard_code,
+
+          learningContext: {
+            id: routineStep.learning_context_id,
+            key: routineStep.learning_context_key || "unspecified",
+            name: routineStep.learning_context_name || "Sin especificar",
+            category: routineStep.learning_context_category || "environment",
+            icon: routineStep.learning_context_icon || null,
+            color: routineStep.learning_context_color || null,
+          },
+
+          source,
+          accessProfile,
+          relationshipKey,
+        },
+
+        payload: {
+          started: true,
+        },
+
+        metadata: {
+          managedByAdult: isAdultManagingChild,
+          engineVersion: "1.0.0",
+        },
+
+        occurredAt: startedAt,
+      },
+      client,
+    );
+
+    await client.query("COMMIT");
+
+    return res.status(eventResult.created ? 201 : 200).json({
+      message: eventResult.created
+        ? "FloCard iniciada correctamente"
+        : "La FloCard ya había sido iniciada hoy",
+
+      managedByAdult: isAdultManagingChild,
+
+      floCard: {
+        code: floCard.code,
+        name: floCard.name,
+      },
+
+      event: eventResult.event,
+      duplicate: eventResult.duplicate,
+    });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+
+    console.error("Error iniciando FloCard de rutina:", error);
+
+    return res.status(error.statusCode || 500).json({
+      message: error.message || "No se pudo registrar el inicio de la FloCard",
     });
   } finally {
     client.release();
@@ -1488,7 +1798,13 @@ const uncompleteRoutineStep = async (req, res) => {
       `
       SELECT
         rs.id,
-        rs.title
+        rs.title,
+        rs.icon,
+        rs.flocard_code,
+        rs.position,
+        rs.description,
+        rs.estimated_minutes,
+        rs.is_optional
       FROM "FloFlo".routine_step rs
 
       INNER JOIN "FloFlo".routine r
@@ -1852,5 +2168,6 @@ module.exports = {
   deleteRoutine,
   completeRoutineStep,
   uncompleteRoutineStep,
+  startRoutineStepFloCard,
   completeRoutine,
 };

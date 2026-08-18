@@ -1,17 +1,15 @@
 const {
-  loadFramework,
-} = require("../cognitive-engine/frameworkLoader");
-
-const {
   getAdaptiveExperienceRecommendations,
 } = require("../cognitive-engine/services/adaptiveIntelligenceService");
+
+const { getAdultChildAccess } = require(
+  "../cognitive-engine/services/childAccessService",
+);
 
 const validatePositiveInteger = (value) => {
   const numberValue = Number(value);
 
-  return Number.isInteger(numberValue) && numberValue > 0
-    ? numberValue
-    : null;
+  return Number.isInteger(numberValue) && numberValue > 0 ? numberValue : null;
 };
 
 const getExperienceRecommendations = async (req, res) => {
@@ -24,19 +22,41 @@ const getExperienceRecommendations = async (req, res) => {
       });
     }
 
-    const requestedChildId = validatePositiveInteger(
-      req.query.childId,
-    );
+    const childIdWasProvided =
+      req.query.childId !== undefined &&
+      req.query.childId !== null &&
+      req.query.childId !== "";
 
-    const ownerUserId = requestedChildId || actorUserId;
+    const requestedChildId = childIdWasProvided
+      ? validatePositiveInteger(req.query.childId)
+      : null;
 
-    
-    const recommendations =
-      await getAdaptiveExperienceRecommendations({
-        ownerUserId,
-        actorUserId,
-        limit: 6,
+    if (childIdWasProvided && !requestedChildId) {
+      return res.status(400).json({
+        message: "Niño/a inválido",
       });
+    }
+
+    let ownerUserId = actorUserId;
+
+    if (requestedChildId) {
+      if (req.user?.role !== "parent") {
+        return res.status(403).json({
+          message:
+            "Solo una cuenta adulta puede solicitar recomendaciones de un niño/a",
+        });
+      }
+
+      await getAdultChildAccess(actorUserId, requestedChildId);
+
+      ownerUserId = requestedChildId;
+    }
+
+    const recommendations = await getAdaptiveExperienceRecommendations({
+      ownerUserId,
+      actorUserId,
+      limit: 6,
+    });
 
     const response = recommendations.map((item) => ({
       template_id: item.template_id,
@@ -60,25 +80,20 @@ const getExperienceRecommendations = async (req, res) => {
       is_favorite: Boolean(item.is_favorite),
 
       // Se mantiene para uso interno/API.
-      recommendation_priority:
-        Number(item.recommendation_priority),
+      recommendation_priority: Number(item.recommendation_priority),
 
       reason: item.reason,
 
-      explanations: Array.isArray(item.explanations)
-        ? item.explanations
-        : [],
+      explanations: Array.isArray(item.explanations) ? item.explanations : [],
     }));
 
     return res.json(response);
   } catch (error) {
-    console.error(
-      "Error obteniendo recomendaciones de experiencias:",
-      error,
-    );
+    console.error("Error obteniendo recomendaciones de experiencias:", error);
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       message:
+        error.message ||
         "No se pudieron obtener las recomendaciones de experiencias",
     });
   }

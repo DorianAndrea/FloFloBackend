@@ -12,6 +12,7 @@ const {
   updateRoutine,
   completeRoutineStep,
   uncompleteRoutineStep,
+  startRoutineStepFloCard,
   completeRoutine,
 } = require("../controllers/routineController");
 
@@ -38,6 +39,17 @@ router.delete(
   uncompleteRoutineStep,
 );
 
+router.post(
+  "/children/:childId/:routineId/steps/:stepId/complete",
+  authMiddleware,
+  completeRoutineStep,
+);
+
+router.post(
+  "/children/:childId/:routineId/steps/:stepId/flocard/start",
+  authMiddleware,
+  startRoutineStepFloCard,
+);
 /*
   Rutas normales para niño/a usando sus propias rutinas.
 */
@@ -49,7 +61,11 @@ router.get("/history", authMiddleware, getRoutineHistory);
 router.get("/", authMiddleware, getRoutines);
 
 router.post("/", authMiddleware, createRoutine);
-
+router.post(
+  "/:routineId/steps/:stepId/flocard/start",
+  authMiddleware,
+  startRoutineStepFloCard,
+);
 /*
   Las rutas específicas de pasos deben ir antes
   que las rutas genéricas con /:id.
@@ -74,5 +90,11 @@ router.post(
 
 router.put("/:id", authMiddleware, updateRoutine);
 router.delete("/:id", authMiddleware, deleteRoutine);
+
+router.post(
+  "/:routineId/steps/:stepId/complete",
+  authMiddleware,
+  completeRoutineStep,
+);
 
 module.exports = router;

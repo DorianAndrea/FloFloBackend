@@ -1,13 +1,13 @@
 const express = require("express");
 const router = express.Router();
-
+const upload = require("../middleware/upload");
 const authMiddleware = require("../middleware/authMiddleware");
 
 const {
   getMyChildren,
+  createChildProfile,
   createMyLinkCode,
   linkChildToMe,
-
   getChildSupportTeam,
   createChildSupportTeamInvitation,
   getSupportTeamInvitation,
@@ -16,11 +16,58 @@ const {
   removeChildSupportTeamMember,
 } = require("../controllers/parentChildController");
 
-router.get("/me/children", authMiddleware, getMyChildren);
+/* -------------------------------------------------------------------------- */
+/* NIÑOS DEL CUIDADOR                                                         */
+/* -------------------------------------------------------------------------- */
 
-router.post("/me/link-code", authMiddleware, createMyLinkCode);
+/*
+ * Obtener los perfiles infantiles asociados
+ * al adulto autenticado.
+ */
+router.get(
+  "/me/children",
+  authMiddleware,
+  getMyChildren,
+);
 
-router.post("/me/children", authMiddleware, linkChildToMe);
+/*
+ * NUEVO FLUJO
+ *
+ * Crear un perfil infantil sin:
+ * - correo
+ * - contraseña
+ * - cuenta user
+ *
+ * POST /me/children
+ */
+router.post(
+  "/me/children",
+  authMiddleware,
+  upload.single("avatar"),
+  createChildProfile,
+);
+
+/* -------------------------------------------------------------------------- */
+/* LEGACY - VINCULACIÓN ANTIGUA                                               */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Estos endpoints se mantienen temporalmente
+ * mientras retiramos el flujo antiguo del frontend.
+ *
+ * NO deben utilizarse para niños nuevos.
+ */
+router.post(
+  "/me/link-code",
+  authMiddleware,
+  createMyLinkCode,
+);
+
+router.post(
+  "/me/children/link",
+  authMiddleware,
+  linkChildToMe,
+);
 
 /* -------------------------------------------------------------------------- */
 /* EQUIPO FLOFLO                                                              */

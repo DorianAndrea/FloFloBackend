@@ -23,6 +23,49 @@ const getMyChildren = async (req, res) => {
   }
 };
 
+const createChildProfile = async (req, res) => {
+  try {
+    const parentId = req.user.id;
+
+    if (req.user.role !== "parent") {
+      return res.status(403).json({
+        message: "Solo una cuenta cuidadora puede crear perfiles infantiles",
+      });
+    }
+
+    const firstName = String(req.body.firstName || "").trim();
+    const lastName = String(req.body.lastName || "").trim();
+    const birthDate = req.body.birthDate || null;
+    const avatarUrl = req.file ? req.file.path : null;
+
+    if (!firstName) {
+      return res.status(400).json({
+        message: "El nombre del niño/a es obligatorio",
+      });
+    }
+
+    const child = await parentChildService.createChildProfile({
+      parentId,
+      firstName,
+      lastName: lastName || null,
+      birthDate,
+      avatarUrl,
+    });
+
+    return res.status(201).json({
+      message: "Perfil infantil creado correctamente",
+      child,
+    });
+  } catch (error) {
+    console.error("Error creando perfil infantil:", error);
+
+    return res.status(error.statusCode || 500).json({
+      message:
+        error.message || "No se pudo crear el perfil del niño/a",
+    });
+  }
+};
+
 const createMyLinkCode = async (req, res) => {
   try {
     const childId = req.user.id;
@@ -309,6 +352,9 @@ const removeChildSupportTeamMember = async (req, res) => {
 
 module.exports = {
   getMyChildren,
+  createChildProfile,
+
+  // Legacy temporal
   createMyLinkCode,
   linkChildToMe,
 

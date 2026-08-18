@@ -12,20 +12,20 @@ const MASTERY_PRIORITY = Object.freeze({
 
 const PRIORITY_RULES = Object.freeze({
   BASE: 10,
-
   NEVER_OPENED: 35,
-
   NOT_USED_7_DAYS: 20,
-
   LOW_USAGE: 15,
-
   FAVORITE: 10,
-
   SHORT_EXPERIENCE: 5,
-
   USED_TODAY: -40,
-
   VERY_FREQUENTLY_USED: -20,
+});
+
+const CONTEXT_PRIORITY = Object.freeze({
+  NO_EVIDENCE: 14,
+  LOW_EVIDENCE: 8,
+  SOME_EVIDENCE: 3,
+  WELL_ESTABLISHED: -8,
 });
 
 const buildExplanation = ({
@@ -70,6 +70,7 @@ const buildExplanation = ({
 
   return explanations;
 };
+
 const buildCognitiveExplanation = (cognitiveProfile) => {
   const explanations = [];
 
@@ -106,11 +107,70 @@ const buildCognitiveExplanation = (cognitiveProfile) => {
   return explanations;
 };
 
+const buildContextualExplanation = ({
+  cognitiveProfile,
+  contextualSignals,
+  learningContextName,
+}) => {
+  const explanations = [];
+
+  if (
+    !learningContextName ||
+    !Array.isArray(contextualSignals) ||
+    contextualSignals.length === 0
+  ) {
+    return explanations;
+  }
+
+  const prioritySignal = contextualSignals
+    .filter((signal) => signal.adjustment > 0)
+    .sort((a, b) => b.adjustment - a.adjustment)[0];
+
+  if (!prioritySignal) {
+    return explanations;
+  }
+
+  const concept = cognitiveProfile.find(
+    (item) => item.code === prioritySignal.concept_code,
+  );
+
+  const conceptName = concept?.name || prioritySignal.concept_code;
+
+  const contextName = learningContextName.toLowerCase();
+
+  if (prioritySignal.exposure_count === 0) {
+    explanations.push(
+      `Puede ser útil explorar ${conceptName.toLowerCase()} en ${contextName}, ya que todavía no se ha practicado mucho en este contexto.`,
+    );
+
+    return explanations;
+  }
+
+  if (prioritySignal.exposure_count <= 2) {
+    explanations.push(
+      `Puede ser útil seguir practicando ${conceptName.toLowerCase()} en ${contextName} para fortalecer esta habilidad en ese contexto.`,
+    );
+
+    return explanations;
+  }
+
+  if (prioritySignal.exposure_count <= 5) {
+    explanations.push(
+      `Puede ayudar a consolidar ${conceptName.toLowerCase()} en ${contextName}.`,
+    );
+
+    return explanations;
+  }
+
+  return explanations;
+};
+
 const evaluateExperienceCandidate = (
   candidate,
   frameworkExperience,
   masteryByConcept,
   conceptMetaByCode,
+  contextByConceptAndKey,
 ) => {
   let priority = PRIORITY_RULES.BASE;
 
@@ -122,6 +182,7 @@ const evaluateExperienceCandidate = (
 
   if (candidate.last_opened_at) {
     const lastOpened = new Date(candidate.last_opened_at);
+
     const now = new Date();
 
     const diffMs = now.getTime() - lastOpened.getTime();
@@ -177,8 +238,11 @@ const evaluateExperienceCandidate = (
 
     return {
       code: concept.code,
+
       name: mastery?.concept_name || conceptMeta?.name || concept.code,
+
       weight: Number(concept.weight),
+
       is_primary: Boolean(concept.is_primary),
 
       mastery_level: mastery?.mastery_level || "unknown",
@@ -200,6 +264,10 @@ const evaluateExperienceCandidate = (
       successful_context_count: Number(mastery?.successful_context_count || 0),
     };
   });
+
+  /*
+   * Ajuste por dominio global del concepto.
+   */
   let masteryAdjustment = 0;
 
   for (const concept of cognitiveProfile) {
@@ -210,7 +278,73 @@ const evaluateExperienceCandidate = (
 
   priority += Math.round(masteryAdjustment);
 
+  /*
+   * Ajuste contextual.
+   *
+   * Si una experiencia ocurre en un contexto
+   * con poca o ninguna evidencia para el concepto,
+   * aumenta su prioridad.
+   *
+   * Si el concepto ya está muy observado con éxito
+   * en ese mismo contexto, reduce la prioridad.
+   */
+  let contextAdjustment = 0;
+
+  const contextualSignals = [];
+
+  const candidateContextKey = candidate.learning_context_key || null;
+
+  if (candidateContextKey && candidateContextKey !== "unspecified") {
+    for (const concept of cognitiveProfile) {
+      const lookupKey = `${concept.code}::${candidateContextKey}`;
+
+      const contextSummary = contextByConceptAndKey?.get(lookupKey) || null;
+
+      let conceptContextAdjustment = 0;
+
+      if (!contextSummary) {
+        conceptContextAdjustment = CONTEXT_PRIORITY.NO_EVIDENCE;
+      } else {
+        const exposureCount = Number(contextSummary.exposure_count || 0);
+
+        const successCount = Number(contextSummary.success_count || 0);
+
+        if (exposureCount <= 2) {
+          conceptContextAdjustment = CONTEXT_PRIORITY.LOW_EVIDENCE;
+        } else if (exposureCount <= 5) {
+          conceptContextAdjustment = CONTEXT_PRIORITY.SOME_EVIDENCE;
+        } else if (exposureCount >= 6 && successCount === exposureCount) {
+          conceptContextAdjustment = CONTEXT_PRIORITY.WELL_ESTABLISHED;
+        }
+      }
+
+      const weightedContextAdjustment =
+        conceptContextAdjustment * concept.weight;
+
+      contextAdjustment += weightedContextAdjustment;
+
+      contextualSignals.push({
+        concept_code: concept.code,
+        context_key: candidateContextKey,
+
+        exposure_count: Number(contextSummary?.exposure_count || 0),
+
+        success_count: Number(contextSummary?.success_count || 0),
+
+        adjustment: Math.round(weightedContextAdjustment),
+      });
+    }
+  }
+
+  priority += Math.round(contextAdjustment);
+
   const cognitiveExplanations = buildCognitiveExplanation(cognitiveProfile);
+
+  const contextualExplanations = buildContextualExplanation({
+    cognitiveProfile,
+    contextualSignals,
+    learningContextName: candidate.learning_context_name,
+  });
 
   const usageExplanations = buildExplanation({
     neverOpened,
@@ -221,7 +355,11 @@ const evaluateExperienceCandidate = (
     learningContextName: candidate.learning_context_name,
   });
 
-  const explanations = [...cognitiveExplanations, ...usageExplanations];
+  const explanations = [
+    ...cognitiveExplanations,
+    ...contextualExplanations,
+    ...usageExplanations,
+  ];
 
   return {
     ...candidate,
@@ -229,6 +367,10 @@ const evaluateExperienceCandidate = (
     recommendation_priority: priority,
 
     mastery_adjustment: Math.round(masteryAdjustment),
+
+    context_adjustment: Math.round(contextAdjustment),
+
+    contextual_signals: contextualSignals,
 
     framework_mapped: Boolean(frameworkExperience),
 
@@ -238,7 +380,11 @@ const evaluateExperienceCandidate = (
 
     explanations,
 
-    reason: explanations[0] || "Puede aportar variedad al aprendizaje actual.",
+    reason:
+      contextualExplanations[0] ||
+      cognitiveExplanations[0] ||
+      usageExplanations[0] ||
+      "Puede aportar variedad al aprendizaje actual.",
   };
 };
 
@@ -248,6 +394,7 @@ const diversifyRecommendations = (
   maxPerCategory = 2,
 ) => {
   const selected = [];
+
   const categoryCounts = new Map();
 
   for (const candidate of candidates) {
@@ -276,108 +423,161 @@ const getAdaptiveExperienceRecommendations = async ({
   actorUserId,
   limit = 6,
 }) => {
+  /*
+   * Experiencias candidatas.
+   */
   const result = await pool.query(
     `
-    SELECT
-      et.id AS template_id,
-      et.code AS template_code,
-      et.name,
-      et.description,
-      et.icon,
-      et.estimated_minutes,
-
-      ec.id AS category_id,
-      ec.name AS category_name,
-      ec.icon AS category_icon,
-      ec.color AS category_color,
-
-      lc.id AS learning_context_id,
-      lc.name AS learning_context_name,
-      lc.icon AS learning_context_icon,
-
-      er.last_opened_at,
-
-      COALESCE(
-        er.open_count,
-        0
-      )::int AS open_count,
-
-      CASE
-        WHEN ef.id IS NULL THEN FALSE
-        ELSE TRUE
-      END AS is_favorite,
-
-      COALESCE(
-        step_data.step_count,
-        0
-      )::int AS step_count
-
-    FROM "FloFlo".experience_template et
-
-    JOIN "FloFlo".experience_category ec
-      ON ec.id = et.category_id
-      AND ec.is_active = TRUE
-
-    LEFT JOIN "FloFlo".learning_context lc
-      ON lc.id = et.learning_context_id
-
-    LEFT JOIN "FloFlo".experience_recent er
-      ON er.template_id = et.id
-      AND er.owner_user_id = $1
-
-    LEFT JOIN "FloFlo".experience_favorite ef
-      ON ef.template_id = et.id
-      AND ef.user_id = $2
-
-    LEFT JOIN LATERAL (
       SELECT
-        COUNT(*)::int AS step_count
+        et.id AS template_id,
+        et.code AS template_code,
+        et.name,
+        et.description,
+        et.icon,
+        et.estimated_minutes,
 
-      FROM "FloFlo".experience_template_step ets
+        ec.id AS category_id,
+        ec.name AS category_name,
+        ec.icon AS category_icon,
+        ec.color AS category_color,
 
-      WHERE ets.template_id = et.id
-    ) step_data ON TRUE
+        lc.id AS learning_context_id,
+        lc.context_key AS learning_context_key,
+        lc.name AS learning_context_name,
+        lc.icon AS learning_context_icon,
 
-    WHERE et.is_active = TRUE
-    `,
+        er.last_opened_at,
+
+        COALESCE(
+          er.open_count,
+          0
+        )::int AS open_count,
+
+        CASE
+          WHEN ef.id IS NULL
+            THEN FALSE
+          ELSE TRUE
+        END AS is_favorite,
+
+        COALESCE(
+          step_data.step_count,
+          0
+        )::int AS step_count
+
+      FROM "FloFlo".experience_template et
+
+      JOIN "FloFlo".experience_category ec
+        ON ec.id = et.category_id
+        AND ec.is_active = TRUE
+
+      LEFT JOIN "FloFlo".learning_context lc
+        ON lc.id =
+          et.learning_context_id
+
+      LEFT JOIN "FloFlo".experience_recent er
+        ON er.template_id = et.id
+        AND er.owner_user_id = $1
+
+      LEFT JOIN "FloFlo".experience_favorite ef
+        ON ef.template_id = et.id
+        AND ef.user_id = $2
+
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*)::int AS step_count
+
+        FROM "FloFlo".experience_template_step ets
+
+        WHERE ets.template_id = et.id
+      ) step_data ON TRUE
+
+      WHERE et.is_active = TRUE
+      `,
     [ownerUserId, actorUserId],
   );
+
+  /*
+   * Mastery global del niño/a.
+   */
   const masteryResult = await pool.query(
     `
-  SELECT
-    cc.code AS concept_code,
-    cc.name AS concept_name,
-    ccm.mastery_level,
-    ccm.mastery_score,
-    ccm.confidence,
-    ccm.evidence_count,
-    ccm.positive_evidence_count,
-    ccm.negative_evidence_count,
-    ccm.context_count,
-    ccm.successful_context_count,
-    ccm.last_evidence_at,
-    ccm.last_progress_at
+        SELECT
+          cc.code AS concept_code,
+          cc.name AS concept_name,
 
-  FROM "FloFlo".child_concept_mastery ccm
+          ccm.mastery_level,
+          ccm.mastery_score,
+          ccm.confidence,
 
-  JOIN "FloFlo".cognitive_concept cc
-    ON cc.id = ccm.concept_id
+          ccm.evidence_count,
+          ccm.positive_evidence_count,
+          ccm.negative_evidence_count,
 
-  WHERE ccm.child_id = $1
-  `,
+          ccm.context_count,
+          ccm.successful_context_count,
+
+          ccm.last_evidence_at,
+          ccm.last_progress_at
+
+        FROM "FloFlo".child_concept_mastery ccm
+
+        JOIN "FloFlo".cognitive_concept cc
+          ON cc.id =
+            ccm.concept_id
+
+        WHERE ccm.child_id = $1
+        `,
     [ownerUserId],
   );
 
-  const conceptsResult = await pool.query(
+  /*
+   * Evidencia contextual del niño/a.
+   */
+  const contextResult = await pool.query(
     `
-  SELECT
-    code,
-    name
-  FROM "FloFlo".cognitive_concept
-  WHERE active = TRUE
-  `,
+        SELECT
+          cc.code AS concept_code,
+
+          ccc.context_key,
+          ccc.context_label,
+
+          ccc.exposure_count,
+          ccc.success_count,
+          ccc.partial_count,
+          ccc.difficulty_count,
+
+          ccc.last_observed_at
+
+        FROM "FloFlo".child_concept_context ccc
+
+        JOIN "FloFlo".cognitive_concept cc
+          ON cc.id =
+            ccc.concept_id
+
+        WHERE ccc.child_id = $1
+          AND ccc.context_key <> 'unspecified'
+        `,
+    [ownerUserId],
   );
 
+  /*
+   * Catálogo maestro de conceptos.
+   */
+  const conceptsResult = await pool.query(
+    `
+        SELECT
+          code,
+          name
+
+        FROM "FloFlo".cognitive_concept
+
+        WHERE active = TRUE
+        `,
+  );
+
+  /*
+   * Mapas rápidos para el ranking.
+   */
   const conceptMetaByCode = new Map(
     conceptsResult.rows.map((concept) => [concept.code, concept]),
   );
@@ -385,6 +585,22 @@ const getAdaptiveExperienceRecommendations = async ({
   const masteryByConcept = new Map(
     masteryResult.rows.map((mastery) => [mastery.concept_code, mastery]),
   );
+
+  /*
+   * Ejemplo:
+   * AUTONOMY::home
+   * REGULATION::supermarket
+   */
+  const contextByConceptAndKey = new Map(
+    contextResult.rows.map((context) => [
+      `${context.concept_code}::${context.context_key}`,
+      context,
+    ]),
+  );
+
+  /*
+   * Evalúa y ordena todas las experiencias.
+   */
   const rankedCandidates = result.rows
     .map((row) => {
       const frameworkExperience = cognitiveKernel.getExperience(
@@ -396,6 +612,7 @@ const getAdaptiveExperienceRecommendations = async ({
         frameworkExperience,
         masteryByConcept,
         conceptMetaByCode,
+        contextByConceptAndKey,
       );
     })
     .sort((a, b) => {
@@ -408,12 +625,18 @@ const getAdaptiveExperienceRecommendations = async ({
 
       return String(a.name).localeCompare(String(b.name), "es");
     });
+  const selectedRecommendations = diversifyRecommendations(
+    rankedCandidates,
+    limit,
+    2,
+  );
 
-  return diversifyRecommendations(rankedCandidates, limit, 2);
+  return selectedRecommendations;
 };
 
 module.exports = {
   PRIORITY_RULES,
+  CONTEXT_PRIORITY,
   evaluateExperienceCandidate,
   getAdaptiveExperienceRecommendations,
 };

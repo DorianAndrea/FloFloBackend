@@ -26,7 +26,21 @@ const validatePositiveInteger = (value, label) => {
   return numberValue;
 };
 
-const getAdultChildAccess = async (adultId, childId, client = pool) => {
+const getAdultChildAccess = async (
+  adultId,
+  childId,
+  client = pool,
+) => {
+  const cleanAdultId = validatePositiveInteger(
+    adultId,
+    "Adulto",
+  );
+
+  const cleanChildId = validatePositiveInteger(
+    childId,
+    "Niño/a",
+  );
+
   const result = await client.query(
     `
     SELECT
@@ -35,23 +49,27 @@ const getAdultChildAccess = async (adultId, childId, client = pool) => {
       pc.access_profile,
       pc.can_manage_team,
       pc.status
+
     FROM "FloFlo".parent_child pc
 
-    INNER JOIN "FloFlo"."user" child
+    INNER JOIN "FloFlo".child_profile child
       ON child.id = pc.child_id
 
     WHERE pc.parent_id = $1
       AND pc.child_id = $2
       AND pc.status = 'active'
-      AND child.role = 'child'
+      AND child.status = 'active'
 
     LIMIT 1
     `,
-    [adultId, childId],
+    [cleanAdultId, cleanChildId],
   );
 
   if (result.rows.length === 0) {
-    throw createHttpError("No tienes permiso para acceder a este niño/a", 403);
+    throw createHttpError(
+      "No tienes permiso para acceder a este niño/a",
+      403,
+    );
   }
 
   return result.rows[0];

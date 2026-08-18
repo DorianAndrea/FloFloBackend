@@ -40,9 +40,18 @@ const resolveEventHandler = (eventType) => {
     case COGNITIVE_EVENT_TYPES.ROUTINE_COMPLETED: {
       const {
         processRoutineCompletedEvidence,
-      } = require("./evidenceEngineService");
+      } = require("./evidenceEngineService");x
 
       return processRoutineCompletedEvidence;
+    }
+
+    case COGNITIVE_EVENT_TYPES.FLOCARD_COMPLETED:
+    case COGNITIVE_EVENT_TYPES.ROUTINE_STEP_COMPLETED: {
+      const {
+        processFloCardCompletedEvidence,
+      } = require("./evidenceEngineService");
+
+      return processFloCardCompletedEvidence;
     }
 
     default:
