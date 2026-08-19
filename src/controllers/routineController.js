@@ -1178,8 +1178,6 @@ const updateRoutine = async (req, res) => {
         );
 
         savedSteps.push(stepResult.rows[0]);
-
-        savedSteps.push(stepResult.rows[0]);
       }
     }
 
@@ -1323,6 +1321,13 @@ const completeRoutineStep = async (req, res) => {
 
     const notes =
       typeof req.body?.notes === "string" ? req.body.notes.trim() : null;
+
+    const interactionResult =
+      req.body?.interaction_result &&
+      typeof req.body.interaction_result === "object" &&
+      !Array.isArray(req.body.interaction_result)
+        ? req.body.interaction_result
+        : null;
 
     const validSupportLevels = [
       "independent",
@@ -1555,6 +1560,8 @@ const completeRoutineStep = async (req, res) => {
             supportLevel: stepProgress.support_level || null,
 
             notes: stepProgress.notes || null,
+
+            interactionResult,
           },
 
           metadata: {
@@ -1585,6 +1592,461 @@ const completeRoutineStep = async (req, res) => {
 
     return res.status(error.statusCode || 500).json({
       message: error.message || "No se pudo completar el paso",
+    });
+  } finally {
+    client.release();
+  }
+};
+
+const completeRoutineStepSequence = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const {
+      ownerId,
+      actorId,
+      isAdultManagingChild,
+      source,
+      accessProfile,
+      relationshipKey,
+    } = await resolveRoutineOwnerId(req, client);
+
+    const routineId = validatePositiveInteger(req.params.routineId, "Rutina");
+
+    const triggerStepId = validatePositiveInteger(req.params.stepId, "Paso");
+
+    const { dateString } = getTodayInfo();
+
+    const rawStepIds = req.body?.step_ids;
+
+    if (!Array.isArray(rawStepIds) || rawStepIds.length === 0) {
+      throw createHttpError(
+        "step_ids debe contener los pasos completados por la secuencia",
+        400,
+      );
+    }
+
+    const stepIds = [
+      ...new Set(
+        rawStepIds.map((stepId) =>
+          validatePositiveInteger(stepId, "Paso de secuencia"),
+        ),
+      ),
+    ];
+
+    if (!stepIds.includes(triggerStepId)) {
+      throw createHttpError(
+        "El paso que inició la FloCard debe estar incluido en step_ids",
+        400,
+      );
+    }
+
+    const supportLevel =
+      req.body?.support_level === undefined ||
+      req.body?.support_level === null ||
+      req.body?.support_level === ""
+        ? null
+        : String(req.body.support_level).trim();
+
+    const notes =
+      typeof req.body?.notes === "string" ? req.body.notes.trim() : null;
+
+    const interactionResult =
+      req.body?.interaction_result &&
+      typeof req.body.interaction_result === "object" &&
+      !Array.isArray(req.body.interaction_result)
+        ? req.body.interaction_result
+        : null;
+
+    const validSupportLevels = [
+      "independent",
+      "verbal",
+      "visual",
+      "gestural",
+      "physical_partial",
+      "physical_total",
+    ];
+
+    if (supportLevel !== null && !validSupportLevels.includes(supportLevel)) {
+      throw createHttpError("Nivel de apoyo inválido", 400);
+    }
+
+    /*
+     * Recupera la rutina y el paso que abrió la FloCard.
+     */
+    const triggerResult = await client.query(
+      `
+      SELECT
+        r.id AS routine_id,
+        r.name AS routine_name,
+        r.experience_template_id,
+
+        lc.id AS learning_context_id,
+        lc.context_key AS learning_context_key,
+        lc.name AS learning_context_name,
+        lc.category AS learning_context_category,
+        lc.icon AS learning_context_icon,
+        lc.color AS learning_context_color,
+
+        rs.id AS step_id,
+        rs.title AS step_title,
+        rs.position AS step_position,
+        rs.flocard_code
+
+      FROM "FloFlo".routine r
+
+      INNER JOIN "FloFlo".routine_step rs
+        ON rs.routine_id = r.id
+        AND COALESCE(rs.is_active, TRUE) = TRUE
+
+      LEFT JOIN "FloFlo".learning_context lc
+        ON lc.id = r.learning_context_id
+
+      WHERE r.id = $1
+        AND r.user_id = $2
+        AND rs.id = $3
+        AND COALESCE(r.is_active, TRUE) = TRUE
+
+      LIMIT 1
+      `,
+      [routineId, ownerId, triggerStepId],
+    );
+
+    if (triggerResult.rows.length === 0) {
+      throw createHttpError("El paso no pertenece a esta rutina", 404);
+    }
+
+    const triggerStep = triggerResult.rows[0];
+
+    if (!triggerStep.flocard_code) {
+      throw createHttpError(
+        "El paso que inició la secuencia no tiene una FloCard asociada",
+        400,
+      );
+    }
+
+    const floCard = getFloCard(triggerStep.flocard_code);
+
+    if (!floCard) {
+      throw createHttpError(
+        `FloCard no encontrada: ${triggerStep.flocard_code}`,
+        400,
+      );
+    }
+
+    const interactionType =
+      floCard.interaction_type || floCard.interactionType || null;
+
+    if (interactionType !== "sequence") {
+      throw createHttpError(
+        "La FloCard asociada a este paso no es de tipo sequence",
+        400,
+      );
+    }
+
+    /*
+     * Valida que todos los pasos enviados pertenezcan
+     * realmente a esta rutina.
+     */
+    const sequenceStepsResult = await client.query(
+      `
+      SELECT
+        rs.id,
+        rs.title,
+        rs.position,
+        rs.icon,
+        rs.flocard_code,
+        rs.is_optional
+
+      FROM "FloFlo".routine_step rs
+
+      INNER JOIN "FloFlo".routine r
+        ON r.id = rs.routine_id
+
+      WHERE r.id = $1
+        AND r.user_id = $2
+        AND rs.id = ANY($3::BIGINT[])
+        AND COALESCE(r.is_active, TRUE) = TRUE
+        AND COALESCE(rs.is_active, TRUE) = TRUE
+
+      ORDER BY rs.position ASC
+      `,
+      [routineId, ownerId, stepIds],
+    );
+
+    if (sequenceStepsResult.rows.length !== stepIds.length) {
+      throw createHttpError(
+        "Uno o más pasos de la secuencia no pertenecen a esta rutina",
+        400,
+      );
+    }
+
+    const sequenceSteps = sequenceStepsResult.rows;
+
+    const savedProgress = [];
+
+    /*
+     * Marca TODOS los pasos de la secuencia.
+     */
+    for (const step of sequenceSteps) {
+      const progressResult = await client.query(
+        `
+        INSERT INTO "FloFlo".routine_step_progress (
+          user_id,
+          routine_id,
+          routine_step_id,
+
+          completed,
+          completed_at,
+          completion_date,
+
+          completed_by,
+          completer_access_profile,
+          completer_relationship_key,
+          source,
+
+          support_level,
+          notes,
+
+          created_at,
+          updated_at
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+
+          TRUE,
+          NOW(),
+          $4,
+
+          $5,
+          $6,
+          $7,
+          $8,
+
+          $9,
+          $10,
+
+          NOW(),
+          NOW()
+        )
+
+        ON CONFLICT (
+          user_id,
+          routine_step_id,
+          completion_date
+        )
+        DO UPDATE SET
+          completed = TRUE,
+          completed_at = NOW(),
+
+          completed_by = EXCLUDED.completed_by,
+          completer_access_profile =
+            EXCLUDED.completer_access_profile,
+          completer_relationship_key =
+            EXCLUDED.completer_relationship_key,
+          source = EXCLUDED.source,
+
+          support_level = EXCLUDED.support_level,
+          notes = EXCLUDED.notes,
+
+          updated_at = NOW()
+
+        RETURNING *
+        `,
+        [
+          ownerId,
+          routineId,
+          step.id,
+          dateString,
+
+          actorId,
+          accessProfile,
+          relationshipKey,
+          source,
+
+          supportLevel,
+          notes,
+        ],
+      );
+
+      savedProgress.push(progressResult.rows[0]);
+    }
+
+    /*
+     * Una secuencia genera UNA sola evidencia cognitiva.
+     */
+    const conceptCodes = Array.isArray(floCard.concepts)
+      ? floCard.concepts
+      : [];
+
+    if (conceptCodes.length > 0) {
+      const sourceProgress =
+        savedProgress.find(
+          (progress) => Number(progress.routine_step_id) === triggerStepId,
+        ) || savedProgress[0];
+
+      await publishLearningEvent(
+        {
+          idempotencyKey:
+            `routine_step_sequence:${routineId}:` +
+            `${triggerStep.flocard_code}:${dateString}`,
+
+          eventType: COGNITIVE_EVENT_TYPES.FLOCARD_COMPLETED,
+
+          childId: ownerId,
+          actorUserId: actorId,
+
+          sourceModule: "routines",
+
+          sourceEntityType: "routine_step_progress",
+          sourceEntityId: sourceProgress.id,
+
+          conceptCodes,
+
+          context: {
+            routineId,
+            routineName: triggerStep.routine_name,
+
+            stepId: triggerStep.step_id,
+            stepTitle: triggerStep.step_title,
+            stepPosition: triggerStep.step_position,
+
+            floCardCode: triggerStep.flocard_code,
+
+            sequenceStepIds: sequenceSteps.map((step) => step.id),
+
+            sequenceSteps: sequenceSteps.map((step) => ({
+              id: step.id,
+              title: step.title,
+              position: step.position,
+            })),
+
+            learningContext: {
+              id: triggerStep.learning_context_id,
+
+              key: triggerStep.learning_context_key || "unspecified",
+
+              name: triggerStep.learning_context_name || "Sin especificar",
+
+              category: triggerStep.learning_context_category || "environment",
+
+              icon: triggerStep.learning_context_icon || null,
+
+              color: triggerStep.learning_context_color || null,
+            },
+
+            source,
+            accessProfile,
+            relationshipKey,
+          },
+
+          payload: {
+            completed: true,
+
+            completedStepCount: sequenceSteps.length,
+
+            supportLevel,
+            notes,
+
+            interactionResult: {
+              ...(interactionResult || {}),
+
+              completed: true,
+
+              totalSteps: sequenceSteps.length,
+
+              completedStepIds: sequenceSteps.map((step) => step.id),
+            },
+          },
+
+          metadata: {
+            managedByAdult: isAdultManagingChild,
+
+            completionMode: "flocard_sequence",
+
+            engineVersion: "1.0.0",
+          },
+
+          occurredAt: sourceProgress.completed_at,
+        },
+        client,
+      );
+    }
+
+    /*
+     * Comprueba cuántos pasos obligatorios de la rutina
+     * quedaron completados.
+     */
+    const requiredProgressResult = await client.query(
+      `
+      SELECT
+        COUNT(*) FILTER (
+          WHERE COALESCE(rs.is_optional, FALSE) = FALSE
+        )::INT AS total_required,
+
+        COUNT(*) FILTER (
+          WHERE COALESCE(rs.is_optional, FALSE) = FALSE
+            AND rsp.id IS NOT NULL
+            AND rsp.completed = TRUE
+        )::INT AS completed_required
+
+      FROM "FloFlo".routine_step rs
+
+      LEFT JOIN "FloFlo".routine_step_progress rsp
+        ON rsp.routine_step_id = rs.id
+        AND rsp.user_id = $2
+        AND rsp.completion_date = $3
+        AND rsp.completed = TRUE
+
+      WHERE rs.routine_id = $1
+        AND COALESCE(rs.is_active, TRUE) = TRUE
+      `,
+      [routineId, ownerId, dateString],
+    );
+
+    const requiredProgress = requiredProgressResult.rows[0];
+
+    const allRequiredStepsCompleted =
+      Number(requiredProgress.total_required) > 0 &&
+      Number(requiredProgress.completed_required) ===
+        Number(requiredProgress.total_required);
+
+    await client.query("COMMIT");
+
+    return res.status(200).json({
+      message: "Secuencia FloCard completada correctamente",
+
+      managedByAdult: isAdultManagingChild,
+
+      floCard: {
+        code: floCard.code,
+        name: floCard.name,
+      },
+
+      completedSteps: sequenceSteps,
+
+      progress: savedProgress,
+
+      allRequiredStepsCompleted,
+
+      requiredProgress: {
+        completed: Number(requiredProgress.completed_required || 0),
+
+        total: Number(requiredProgress.total_required || 0),
+      },
+    });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+
+    console.error("Error completando secuencia FloCard:", error);
+
+    return res.status(error.statusCode || 500).json({
+      message:
+        error.message || "No se pudo completar la secuencia de la FloCard",
     });
   } finally {
     client.release();
@@ -2167,6 +2629,7 @@ module.exports = {
   updateRoutine,
   deleteRoutine,
   completeRoutineStep,
+  completeRoutineStepSequence,
   uncompleteRoutineStep,
   startRoutineStepFloCard,
   completeRoutine,

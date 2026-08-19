@@ -456,6 +456,8 @@ const processFloCardCompletedEvidence = async ({
         completed: Boolean(payload.completed),
         supportLevel,
         notes: payload.notes || null,
+
+        interactionResult: payload.interactionResult || null,
       },
 
       processing: {

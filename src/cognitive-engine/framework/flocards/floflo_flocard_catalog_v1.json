@@ -11,19 +11,10 @@
       "name": "Cepillar los dientes",
       "description": "Objeto visual interactivo que representa la acción de cepillar los dientes.",
       "icon": "🪥",
-      "interaction_type": "guided_action",
+      "interaction_type": "animation",
       "action": "brush_teeth",
-      "concepts": [
-        "PERSONAL_HYGIENE",
-        "AUTONOMY",
-        "SEQUENCING"
-      ],
-      "states": [
-        "idle",
-        "ready",
-        "active",
-        "completed"
-      ],
+      "concepts": ["PERSONAL_HYGIENE", "AUTONOMY", "SEQUENCING"],
+      "states": ["idle", "ready", "active", "completed"],
       "supports": {
         "visual": true,
         "text": true,
@@ -35,11 +26,115 @@
         "completed": "FLOCARD_COMPLETED"
       },
       "experience_steps": [
-      {
-      "experience_code": "BRUSH_TEETH",
-      "step_title": "Cepillar los dientes"
-    }
-    ]
+        {
+          "experience_code": "BRUSH_TEETH",
+          "step_title": "Cepillar los dientes"
+        }
+      ]
+    },
+    {
+      "code": "WAIT_FOR_TURN_ACTION",
+      "name": "Esperar",
+      "description": "Apoyo visual interactivo para acompañar el tiempo de espera antes de participar.",
+      "icon": "⏰",
+      "interaction_type": "timer",
+      "action": "wait_for_turn",
+      "concepts": ["WAITING", "REGULATION", "TURN_TAKING"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": false
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "WAIT_FOR_TURN",
+          "step_title": "Esperar"
+        }
+      ]
+    },
+    {
+      "code": "IDENTIFY_FEELING_CHOICE",
+      "name": "Notar cómo estoy",
+      "description": "Apoyo visual interactivo para identificar cómo se siente la persona en este momento.",
+      "icon": "🧠",
+      "interaction_type": "choice",
+      "action": "identify_feeling",
+      "concepts": ["EMOTION_RECOGNITION", "COMMUNICATION", "REGULATION"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "EXPRESS_FEELINGS",
+          "step_title": "Notar cómo estoy"
+        }
+      ]
+    },
+    {
+      "code": "WASH_HANDS_SEQUENCE",
+      "name": "Lavarse las manos",
+      "description": "Secuencia visual interactiva para acompañar el lavado de manos.",
+      "icon": "🧼",
+      "interaction_type": "sequence",
+      "action": "wash_hands",
+      "concepts": ["PERSONAL_HYGIENE", "AUTONOMY", "SEQUENCING"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "WASH_HANDS",
+          "step_title": "Mojar las manos"
+        }
+      ]
+    },
+    {
+      "code": "BRUSH_TEETH_SEQUENCE",
+      "name": "Lavarse los dientes",
+      "description": "Secuencia visual interactiva para acompañar el cepillado de dientes.",
+      "icon": "🪥",
+      "interaction_type": "sequence",
+      "action": "brush_teeth",
+      "concepts": ["AUTONOMY", "PERSONAL_HYGIENE", "SEQUENCING"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "BRUSH_TEETH",
+          "step_title": "Tomar el cepillo"
+        }
+      ]
     }
   ]
 }
