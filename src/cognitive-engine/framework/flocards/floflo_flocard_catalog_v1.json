@@ -135,6 +135,84 @@
           "step_title": "Tomar el cepillo"
         }
       ]
+    },
+    {
+      "code": "SLEEP_PREPARATION_SEQUENCE",
+      "name": "Prepararse para dormir",
+      "description": "Secuencia visual interactiva para acompañar la preparación antes de dormir.",
+      "icon": "🌙",
+      "interaction_type": "sequence",
+      "action": "sleep_preparation",
+      "concepts": ["AUTONOMY", "PERSONAL_HYGIENE", "SEQUENCING", "TRANSITIONS"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "SLEEP_PREPARATION",
+          "step_title": "Bañarse"
+        }
+      ]
+    },
+    {
+      "code": "DRESSING_SEQUENCE",
+      "name": "Vestirse",
+      "description": "Secuencia visual interactiva para acompañar el proceso de vestirse paso a paso.",
+      "icon": "👕",
+      "interaction_type": "sequence",
+      "action": "dressing",
+      "concepts": ["AUTONOMY", "SEQUENCING"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "GET_DRESSED",
+          "step_title": "Elegir o revisar la ropa"
+        }
+      ]
+    },
+    {
+      "code": "PREPARE_FOR_SCHOOL_SEQUENCE",
+      "name": "Prepararse para ir al colegio",
+      "description": "Secuencia visual interactiva para acompañar la preparación antes de ir al colegio.",
+      "icon": "🎒",
+      "interaction_type": "sequence",
+      "action": "prepare_for_school",
+      "concepts": ["AUTONOMY", "SEQUENCING", "TRANSITIONS"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "PREPARE_FOR_SCHOOL",
+          "step_title": "Vestirse"
+        }
+      ]
     }
   ]
 }

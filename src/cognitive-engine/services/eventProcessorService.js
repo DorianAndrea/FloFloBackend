@@ -40,7 +40,7 @@ const resolveEventHandler = (eventType) => {
     case COGNITIVE_EVENT_TYPES.ROUTINE_COMPLETED: {
       const {
         processRoutineCompletedEvidence,
-      } = require("./evidenceEngineService");x
+      } = require("./evidenceEngineService");
 
       return processRoutineCompletedEvidence;
     }
