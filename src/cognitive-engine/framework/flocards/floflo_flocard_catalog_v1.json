@@ -213,6 +213,32 @@
           "step_title": "Vestirse"
         }
       ]
+    },
+    {
+      "code": "PREPARE_BACKPACK_SEQUENCE",
+      "name": "Preparar la mochila",
+      "description": "Secuencia visual interactiva para preparar la mochila paso a paso.",
+      "icon": "🎒",
+      "interaction_type": "sequence",
+      "action": "prepare_backpack",
+      "concepts": ["PLANNING", "ORGANIZATION", "AUTONOMY"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "PREPARE_BACKPACK",
+          "step_title": "Preparar la mochila"
+        }
+      ]
     }
   ]
 }
