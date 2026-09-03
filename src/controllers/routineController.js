@@ -321,21 +321,26 @@ const getRoutines = async (req, res) => {
         updater.avatar AS updater_avatar,
 
         CASE
-          WHEN rp.id IS NULL THEN false
-          ELSE true
+          WHEN rp.id IS NULL THEN FALSE
+          ELSE TRUE
         END AS completed_today,
 
         rp.completed_at AS today_completed_at,
         rp.completion_date AS today_completion_date,
 
         rp.completed_by AS today_completed_by,
-        rp.completer_access_profile AS today_completer_access_profile,
-        rp.completer_relationship_key AS today_completer_relationship_key,
+        rp.completer_access_profile
+          AS today_completer_access_profile,
+        rp.completer_relationship_key
+          AS today_completer_relationship_key,
         rp.source AS today_completion_source,
 
-        completer."firstName" AS today_completer_first_name,
-        completer."lastName" AS today_completer_last_name,
-        completer.avatar AS today_completer_avatar
+        completer."firstName"
+          AS today_completer_first_name,
+        completer."lastName"
+          AS today_completer_last_name,
+        completer.avatar
+          AS today_completer_avatar
 
       FROM "FloFlo".routine r
 
@@ -343,24 +348,42 @@ const getRoutines = async (req, res) => {
         ON lc.id = r.learning_context_id
 
       LEFT JOIN LATERAL (
-        SELECT jsonb_agg(
-          jsonb_build_object(
-            'id', rs.id,
-            'routine_id', rs.routine_id,
-            'title', rs.title,
-            'description', rs.description,
-            'icon', rs.icon,
-            'flocard_code', rs.flocard_code,
-            'position', rs.position,
-            'estimated_minutes', rs.estimated_minutes,
-            'is_optional', rs.is_optional
-          )
-    ORDER BY rs.position ASC
-        ) AS steps
+        SELECT
+          jsonb_agg(
+            jsonb_build_object(
+              'id', rs.id,
+              'routine_id', rs.routine_id,
+              'title', rs.title,
+              'description', rs.description,
+              'icon', rs.icon,
+              'flocard_code', rs.flocard_code,
+              'position', rs.position,
+              'estimated_minutes', rs.estimated_minutes,
+              'is_optional', rs.is_optional,
+
+              'completed_today',
+                CASE
+                  WHEN rsp.id IS NULL THEN FALSE
+                  ELSE TRUE
+                END,
+
+              'completed_at', rsp.completed_at,
+              'support_level', rsp.support_level
+            )
+            ORDER BY rs.position ASC
+          ) AS steps
+
         FROM "FloFlo".routine_step rs
+
+        LEFT JOIN "FloFlo".routine_step_progress rsp
+          ON rsp.routine_step_id = rs.id
+          AND rsp.user_id = $1
+          AND rsp.completion_date = $2
+          AND rsp.completed = TRUE
+
         WHERE rs.routine_id = r.id
-          AND COALESCE(rs.is_active, true) = true
-      ) steps_data ON true
+          AND COALESCE(rs.is_active, TRUE) = TRUE
+      ) steps_data ON TRUE
 
       LEFT JOIN "FloFlo".routine_progress rp
         ON rp.routine_id = r.id
@@ -377,7 +400,7 @@ const getRoutines = async (req, res) => {
         ON completer.id = rp.completed_by
 
       WHERE r.user_id = $1
-        AND COALESCE(r.is_active, true) = true
+        AND COALESCE(r.is_active, TRUE) = TRUE
 
       ORDER BY r.start_time ASC, r.name ASC
       `,
