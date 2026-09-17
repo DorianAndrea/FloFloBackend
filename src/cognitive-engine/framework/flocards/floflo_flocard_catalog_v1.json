@@ -239,6 +239,136 @@
           "step_title": "Preparar la mochila"
         }
       ]
+    },
+    {
+      "code": "TAKE_SHOWER_SEQUENCE",
+      "name": "Ducharse",
+      "description": "Secuencia visual interactiva para acompañar la rutina de ducha paso a paso.",
+      "icon": "🚿",
+      "interaction_type": "sequence",
+      "action": "take_shower",
+      "concepts": ["AUTONOMY", "SEQUENCING"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "TAKE_SHOWER",
+          "step_title": "Preparar toalla y ropa"
+        }
+      ]
+    },
+    {
+      "code": "CHOOSE_COMMUNICATION_METHOD_CHOICE",
+      "name": "Elegir una forma de comunicarlo",
+      "description": "FloCard interactiva para elegir una forma cómoda de comunicar cómo me siento.",
+      "icon": "💬",
+      "interaction_type": "choice",
+      "action": "choose_communication_method",
+      "concepts": ["COMMUNICATION"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "EXPRESS_FEELINGS",
+          "step_title": "Elegir una forma de comunicarlo"
+        }
+      ]
+    },
+    {
+      "code": "REQUEST_NEED_CHOICE",
+      "name": "Pedir algo si lo necesito",
+      "description": "FloCard interactiva para expresar una necesidad de apoyo, espacio, compañía u otra necesidad.",
+      "icon": "🤝",
+      "interaction_type": "choice",
+      "action": "request_need",
+      "concepts": ["COMMUNICATION", "AUTONOMY"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "EXPRESS_FEELINGS",
+          "step_title": "Pedir algo si lo necesito"
+        }
+      ]
+    },
+    {
+      "code": "RETURN_FROM_RECESS_SEQUENCE",
+      "name": "Volver a clases después del recreo",
+      "description": "Secuencia visual interactiva para anticipar el cierre del recreo y el regreso a la sala.",
+      "icon": "🏫",
+      "interaction_type": "sequence",
+      "action": "return_from_recess",
+      "concepts": ["TRANSITIONS", "SEQUENCING", "AUTONOMY"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "RETURN_FROM_RECESS",
+          "step_title": "Escuchar o mirar la señal"
+        }
+      ]
+    },
+    {
+      "code": "COMB_HAIR_SEQUENCE",
+      "name": "Peinarse",
+      "description": "Secuencia visual interactiva para acompañar la rutina de peinarse paso a paso.",
+      "icon": "🪮",
+      "interaction_type": "sequence",
+      "action": "comb_hair",
+      "concepts": ["AUTONOMY", "PERSONAL_HYGIENE", "SEQUENCING"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "COMB_HAIR",
+          "step_title": "Tomar el cepillo o peine"
+        }
+      ]
     }
   ]
 }
