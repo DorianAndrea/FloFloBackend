@@ -369,6 +369,58 @@
           "step_title": "Tomar el cepillo o peine"
         }
       ]
+    },
+    {
+      "code": "ASK_FOR_BREAK_SEQUENCE",
+      "name": "Pedir un descanso",
+      "description": "Secuencia visual interactiva para reconocer la necesidad de una pausa, comunicarla, tomar un descanso y revisar si puedo volver.",
+      "icon": "🌿",
+      "interaction_type": "sequence",
+      "action": "ask_for_break",
+      "concepts": ["COMMUNICATION", "REGULATION", "AUTONOMY"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "ASK_FOR_BREAK",
+          "step_title": "Notar que necesito una pausa"
+        }
+      ]
+    },
+    {
+      "code": "ASK_FOR_HELP_SEQUENCE",
+      "name": "Pedir ayuda",
+      "description": "Secuencia visual interactiva para identificar una dificultad, elegir a quién pedir ayuda, comunicar la necesidad y mostrar o explicar lo que ocurre.",
+      "icon": "🙋",
+      "interaction_type": "sequence",
+      "action": "ask_for_help",
+      "concepts": ["COMMUNICATION", "AUTONOMY"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "ASK_FOR_HELP",
+          "step_title": "Identificar una dificultad"
+        }
+      ]
     }
   ]
 }
