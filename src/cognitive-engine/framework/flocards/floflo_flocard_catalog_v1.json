@@ -421,6 +421,110 @@
           "step_title": "Identificar una dificultad"
         }
       ]
+    },
+    {
+      "code": "USE_TOILET_SEQUENCE",
+      "name": "Ir al baño",
+      "description": "Secuencia visual interactiva para acompañar la rutina de ir al baño paso a paso.",
+      "icon": "🚽",
+      "interaction_type": "sequence",
+      "action": "use_toilet",
+      "concepts": ["AUTONOMY", "PERSONAL_HYGIENE", "SEQUENCING"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "USE_TOILET",
+          "step_title": "Ir al baño"
+        }
+      ]
+    },
+    {
+      "code": "EAT_WITH_UTENSILS_SEQUENCE",
+      "name": "Comer con cubiertos",
+      "description": "Secuencia visual interactiva para acompañar el uso de cubiertos durante una comida.",
+      "icon": "🍴",
+      "interaction_type": "sequence",
+      "action": "eat_with_utensils",
+      "concepts": ["AUTONOMY", "SEQUENCING"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "EAT_WITH_UTENSILS",
+          "step_title": "Preparar cubiertos"
+        }
+      ]
+    },
+    {
+      "code": "PUT_AWAY_TOYS_SEQUENCE",
+      "name": "Guardar juguetes",
+      "description": "Secuencia visual interactiva para reunir, ordenar y guardar los juguetes en su lugar.",
+      "icon": "🧸",
+      "interaction_type": "sequence",
+      "action": "put_away_toys",
+      "concepts": ["AUTONOMY", "ORGANIZATION", "SEQUENCING"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "PUT_AWAY_TOYS",
+          "step_title": "Juntar los juguetes"
+        }
+      ]
+    },
+    {
+      "code": "ORGANIZE_BEDROOM_SEQUENCE",
+      "name": "Ordenar la habitación",
+      "description": "Secuencia visual interactiva para recoger, ordenar y revisar la habitación paso a paso.",
+      "icon": "🛏️",
+      "interaction_type": "sequence",
+      "action": "organize_bedroom",
+      "concepts": ["AUTONOMY", "ORGANIZATION", "SEQUENCING"],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "ORGANIZE_BEDROOM",
+          "step_title": "Recoger ropa"
+        }
+      ]
     }
   ]
 }
