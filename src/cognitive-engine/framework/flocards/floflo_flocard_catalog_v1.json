@@ -525,6 +525,37 @@
           "step_title": "Recoger ropa"
         }
       ]
+    },
+    {
+      "code": "EXPRESS_FEELINGS_SEQUENCE",
+      "name": "Contar cómo me siento",
+      "description": "Secuencia visual interactiva para reconocer cómo me siento, elegir cómo comunicarlo, expresarlo y pedir apoyo si lo necesito.",
+      "icon": "💬",
+      "interaction_type": "sequence",
+      "action": "express_feelings",
+      "concepts": [
+        "EMOTION_RECOGNITION",
+        "COMMUNICATION",
+        "REGULATION",
+        "AUTONOMY"
+      ],
+      "states": ["idle", "ready", "active", "completed"],
+      "supports": {
+        "visual": true,
+        "text": true,
+        "audio": false,
+        "gesture": true
+      },
+      "event_mapping": {
+        "started": "FLOCARD_STARTED",
+        "completed": "FLOCARD_COMPLETED"
+      },
+      "experience_steps": [
+        {
+          "experience_code": "EXPRESS_FEELINGS",
+          "step_title": "Notar cómo estoy"
+        }
+      ]
     }
   ]
 }
