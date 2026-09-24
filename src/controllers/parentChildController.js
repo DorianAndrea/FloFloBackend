@@ -60,8 +60,7 @@ const createChildProfile = async (req, res) => {
     console.error("Error creando perfil infantil:", error);
 
     return res.status(error.statusCode || 500).json({
-      message:
-        error.message || "No se pudo crear el perfil del niño/a",
+      message: error.message || "No se pudo crear el perfil del niño/a",
     });
   }
 };
@@ -72,7 +71,8 @@ const createMyLinkCode = async (req, res) => {
 
     if (req.user.role !== "child") {
       return res.status(403).json({
-        message: "Solo una cuenta de niño/a puede generar código de vinculación",
+        message:
+          "Solo una cuenta de niño/a puede generar código de vinculación",
       });
     }
 
@@ -148,10 +148,7 @@ const getChildSupportTeam = async (req, res) => {
       });
     }
 
-    const team = await parentChildService.getSupportTeam(
-      requesterId,
-      childId,
-    );
+    const team = await parentChildService.getSupportTeam(requesterId, childId);
 
     return res.json({
       team,
@@ -174,9 +171,7 @@ const createChildSupportTeamInvitation = async (req, res) => {
       .trim()
       .toLowerCase();
 
-    const relationshipKey = String(
-      req.body.relationshipKey || "",
-    ).trim();
+    const relationshipKey = String(req.body.relationshipKey || "").trim();
 
     const message = String(req.body.message || "").trim();
 
@@ -186,19 +181,42 @@ const createChildSupportTeamInvitation = async (req, res) => {
       });
     }
 
-    const result =
-      await parentChildService.createSupportTeamInvitation({
-        invitedBy,
-        childId,
-        email,
-        relationshipKey,
-        message,
-      });
+    const result = await parentChildService.createSupportTeamInvitation({
+      invitedBy,
+      childId,
+      email,
+      relationshipKey,
+      message,
+    });
+    console.log("🔎 DEBUG EQUIPO FLOFLO", {
+      authUserId: req.user?.id,
+      authUserEmail: req.user?.email,
 
-    const frontendUrl =
-      process.env.FRONTEND_URL || "http://localhost:5173";
+      invitedBy,
+
+      emailIngresado: email,
+      emailGuardado: result.invitation?.email,
+
+      inviterId: result.inviter?.id,
+      inviterFirstName: result.inviter?.firstName,
+      inviterLastName: result.inviter?.lastName,
+
+      childId: result.child?.id,
+      childFirstName: result.child?.firstName,
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
 
     const invitationUrl = `${frontendUrl}/equipo-floflo/invitacion/${result.token}`;
+
+    console.log("DEBUG INVITACIÓN EQUIPO FLOFLO:", {
+      usuarioAutenticado: req.user,
+      invitedBy,
+      correoIngresado: email,
+      correoGuardadoInvitacion: result.invitation?.email,
+      invitadorDevuelto: result.inviter,
+      child: result.child,
+    });
 
     await emailService.sendSupportTeamInvitationEmail({
       to: result.invitation.email,
@@ -221,8 +239,7 @@ const createChildSupportTeamInvitation = async (req, res) => {
 
     return res.status(error.statusCode || 500).json({
       message:
-        error.message ||
-        "No se pudo enviar la invitación al Equipo FloFlo",
+        error.message || "No se pudo enviar la invitación al Equipo FloFlo",
     });
   }
 };
@@ -242,8 +259,7 @@ const getSupportTeamInvitation = async (req, res) => {
 
     return res.status(error.statusCode || 500).json({
       message:
-        error.message ||
-        "No se pudo consultar la invitación al Equipo FloFlo",
+        error.message || "No se pudo consultar la invitación al Equipo FloFlo",
     });
   }
 };
@@ -254,18 +270,16 @@ const acceptSupportTeamInvitation = async (req, res) => {
 
     if (req.user.role !== "parent") {
       return res.status(403).json({
-        message:
-          "La invitación debe aceptarse desde una cuenta adulta",
+        message: "La invitación debe aceptarse desde una cuenta adulta",
       });
     }
 
-    const result =
-      await parentChildService.acceptSupportTeamInvitation({
-        token,
-        userId: req.user.id,
-        userEmail: req.user.email,
-        userRole: req.user.role,
-      });
+    const result = await parentChildService.acceptSupportTeamInvitation({
+      token,
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+    });
 
     return res.status(201).json({
       message: "Ahora formas parte del Equipo FloFlo",
@@ -276,8 +290,7 @@ const acceptSupportTeamInvitation = async (req, res) => {
 
     return res.status(error.statusCode || 500).json({
       message:
-        error.message ||
-        "No se pudo aceptar la invitación al Equipo FloFlo",
+        error.message || "No se pudo aceptar la invitación al Equipo FloFlo",
     });
   }
 };
@@ -294,12 +307,11 @@ const cancelChildSupportTeamInvitation = async (req, res) => {
       });
     }
 
-    const invitation =
-      await parentChildService.cancelSupportTeamInvitation({
-        requesterId,
-        childId,
-        invitationId,
-      });
+    const invitation = await parentChildService.cancelSupportTeamInvitation({
+      requesterId,
+      childId,
+      invitationId,
+    });
 
     return res.json({
       message: "Invitación cancelada",
@@ -310,8 +322,7 @@ const cancelChildSupportTeamInvitation = async (req, res) => {
 
     return res.status(error.statusCode || 500).json({
       message:
-        error.message ||
-        "No se pudo cancelar la invitación al Equipo FloFlo",
+        error.message || "No se pudo cancelar la invitación al Equipo FloFlo",
     });
   }
 };
@@ -328,12 +339,11 @@ const removeChildSupportTeamMember = async (req, res) => {
       });
     }
 
-    const membership =
-      await parentChildService.removeSupportTeamMember({
-        requesterId,
-        childId,
-        memberId,
-      });
+    const membership = await parentChildService.removeSupportTeamMember({
+      requesterId,
+      childId,
+      memberId,
+    });
 
     return res.json({
       message: "Integrante removido del Equipo FloFlo",
@@ -344,8 +354,7 @@ const removeChildSupportTeamMember = async (req, res) => {
 
     return res.status(error.statusCode || 500).json({
       message:
-        error.message ||
-        "No se pudo remover al integrante del Equipo FloFlo",
+        error.message || "No se pudo remover al integrante del Equipo FloFlo",
     });
   }
 };
