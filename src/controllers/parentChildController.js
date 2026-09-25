@@ -188,35 +188,10 @@ const createChildSupportTeamInvitation = async (req, res) => {
       relationshipKey,
       message,
     });
-    console.log("🔎 DEBUG EQUIPO FLOFLO", {
-      authUserId: req.user?.id,
-      authUserEmail: req.user?.email,
-
-      invitedBy,
-
-      emailIngresado: email,
-      emailGuardado: result.invitation?.email,
-
-      inviterId: result.inviter?.id,
-      inviterFirstName: result.inviter?.firstName,
-      inviterLastName: result.inviter?.lastName,
-
-      childId: result.child?.id,
-      childFirstName: result.child?.firstName,
-    });
 
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
 
     const invitationUrl = `${frontendUrl}/equipo-floflo/invitacion/${result.token}`;
-
-    console.log("DEBUG INVITACIÓN EQUIPO FLOFLO:", {
-      usuarioAutenticado: req.user,
-      invitedBy,
-      correoIngresado: email,
-      correoGuardadoInvitacion: result.invitation?.email,
-      invitadorDevuelto: result.inviter,
-      child: result.child,
-    });
 
     await emailService.sendSupportTeamInvitationEmail({
       to: result.invitation.email,
@@ -260,6 +235,40 @@ const getSupportTeamInvitation = async (req, res) => {
     return res.status(error.statusCode || 500).json({
       message:
         error.message || "No se pudo consultar la invitación al Equipo FloFlo",
+    });
+  }
+};
+
+const registerAndAcceptSupportTeamInvitation = async (req, res) => {
+  try {
+    const token = String(req.params.token || "").trim();
+
+    const firstName = String(req.body.firstName || "").trim();
+    const lastName = String(req.body.lastName || "").trim();
+    const password = String(req.body.password || "");
+
+    const result =
+      await parentChildService.registerAndAcceptSupportTeamInvitation({
+        token,
+        firstName,
+        lastName,
+        password,
+      });
+
+    return res.status(201).json({
+      message: "Cuenta creada e invitación aceptada correctamente",
+      ...result,
+    });
+  } catch (error) {
+    console.error(
+      "Error registrando usuario desde invitación Equipo FloFlo:",
+      error,
+    );
+
+    return res.status(error.statusCode || 500).json({
+      message:
+        error.message ||
+        "No fue posible crear la cuenta y aceptar la invitación",
     });
   }
 };
@@ -371,6 +380,8 @@ module.exports = {
   createChildSupportTeamInvitation,
   getSupportTeamInvitation,
   acceptSupportTeamInvitation,
+  registerAndAcceptSupportTeamInvitation,
   cancelChildSupportTeamInvitation,
   removeChildSupportTeamMember,
+  
 };

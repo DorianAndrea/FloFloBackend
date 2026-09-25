@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const bcrypt = require("bcrypt");
 const pool = require("../database/db");
 
 const LINK_CODE_TTL_MINUTES =
@@ -45,6 +46,10 @@ const normalizeEmail = (email) => {
   return String(email || "")
     .trim()
     .toLowerCase();
+};
+
+const isStrongPassword = (password) => {
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(String(password || ""));
 };
 
 const normalizeCode = (code) => {
@@ -867,7 +872,14 @@ const getSupportTeamInvitationByToken = async (token) => {
       child.avatar_url AS child_avatar,
 
       inviter."firstName" AS inviter_first_name,
-      inviter."lastName" AS inviter_last_name
+      inviter."lastName" AS inviter_last_name,
+
+      EXISTS (
+        SELECT 1
+        FROM "FloFlo"."user" invited_user
+        WHERE LOWER(invited_user.email) = LOWER(sti.email)
+          AND invited_user.role = 'parent'
+      ) AS account_exists
 
     FROM "FloFlo".support_team_invitation sti
 
@@ -1051,6 +1063,236 @@ const acceptSupportTeamInvitation = async ({
   }
 };
 
+const registerAndAcceptSupportTeamInvitation = async ({
+  token,
+  firstName,
+  lastName,
+  password,
+}) => {
+  const cleanToken = String(token || "").trim();
+  const cleanFirstName = String(firstName || "").trim();
+  const cleanLastName = String(lastName || "").trim();
+  const cleanPassword = String(password || "");
+
+  if (!cleanToken) {
+    throw createHttpError("Invitación inválida", 400);
+  }
+
+  if (!cleanFirstName || !cleanLastName) {
+    throw createHttpError(
+      "Nombre y apellido son obligatorios",
+      400,
+    );
+  }
+
+  if (!isStrongPassword(cleanPassword)) {
+    throw createHttpError(
+      "La contraseña debe tener al menos 8 caracteres e incluir mayúscula, minúscula y número.",
+      400,
+    );
+  }
+
+  const tokenHash = hashInvitationToken(cleanToken);
+
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    /*
+     * Bloqueamos la invitación para evitar que dos solicitudes
+     * intenten aceptarla al mismo tiempo.
+     */
+    const invitationResult = await client.query(
+      `
+      SELECT *
+      FROM "FloFlo".support_team_invitation
+      WHERE token_hash = $1
+      LIMIT 1
+      FOR UPDATE
+      `,
+      [tokenHash],
+    );
+
+    if (invitationResult.rows.length === 0) {
+      throw createHttpError("Invitación inválida", 404);
+    }
+
+    const invitation = invitationResult.rows[0];
+
+    if (invitation.status !== "pending") {
+      throw createHttpError(
+        "La invitación ya no está disponible",
+        409,
+      );
+    }
+
+    if (new Date(invitation.expires_at) <= new Date()) {
+      await client.query(
+        `
+        UPDATE "FloFlo".support_team_invitation
+        SET status = 'expired'
+        WHERE id = $1
+        `,
+        [invitation.id],
+      );
+
+      throw createHttpError("La invitación ha expirado", 410);
+    }
+
+    const invitationEmail = normalizeEmail(invitation.email);
+
+    /*
+     * Si ya existe una cuenta con ese correo,
+     * no creamos una segunda cuenta.
+     */
+    const existingUserResult = await client.query(
+      `
+      SELECT id
+      FROM "FloFlo"."user"
+      WHERE LOWER(email) = LOWER($1)
+      LIMIT 1
+      `,
+      [invitationEmail],
+    );
+
+    if (existingUserResult.rows.length > 0) {
+      throw createHttpError(
+        "Ya existe una cuenta FloFlo con este correo. Inicia sesión para aceptar la invitación.",
+        409,
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(cleanPassword, 10);
+
+    /*
+     * Todas las personas adultas usan técnicamente role = parent.
+     * Su función real dentro del equipo queda en relationship_key
+     * y access_profile.
+     */
+    const userResult = await client.query(
+      `
+      INSERT INTO "FloFlo"."user"
+      (
+        "firstName",
+        "lastName",
+        email,
+        password,
+        role,
+        created_at
+      )
+      VALUES
+      (
+        $1,
+        $2,
+        $3,
+        $4,
+        'parent',
+        NOW()
+      )
+      RETURNING
+        id,
+        "firstName",
+        "lastName",
+        email,
+        avatar,
+        role
+      `,
+      [
+        cleanFirstName,
+        cleanLastName,
+        invitationEmail,
+        hashedPassword,
+      ],
+    );
+
+    const user = userResult.rows[0];
+
+    /*
+     * Incorporamos al nuevo adulto al Equipo FloFlo
+     * usando exactamente los permisos definidos
+     * por la invitación.
+     */
+    const membershipResult = await client.query(
+      `
+      INSERT INTO "FloFlo".parent_child
+      (
+        parent_id,
+        child_id,
+        relationship_key,
+        access_profile,
+        can_manage_team,
+        invited_by,
+        accepted_at,
+        status
+      )
+      VALUES
+      (
+        $1,
+        $2,
+        $3,
+        $4,
+        FALSE,
+        $5,
+        NOW(),
+        'active'
+      )
+
+      ON CONFLICT (parent_id, child_id)
+      DO UPDATE SET
+        relationship_key = EXCLUDED.relationship_key,
+        access_profile = EXCLUDED.access_profile,
+        invited_by = EXCLUDED.invited_by,
+        accepted_at = NOW(),
+        status = 'active'
+
+      RETURNING *
+      `,
+      [
+        user.id,
+        invitation.child_id,
+        invitation.relationship_key,
+        invitation.access_profile,
+        invitation.invited_by,
+      ],
+    );
+
+    await client.query(
+      `
+      UPDATE "FloFlo".support_team_invitation
+      SET
+        status = 'accepted',
+        accepted_at = NOW(),
+        accepted_by = $2
+      WHERE id = $1
+      `,
+      [invitation.id, user.id],
+    );
+
+    await client.query("COMMIT");
+
+    return {
+      created: true,
+      accepted: true,
+      user,
+      membership: membershipResult.rows[0],
+    };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+
+    if (error.code === "23505") {
+      throw createHttpError(
+        "Ya existe una cuenta FloFlo con este correo.",
+        409,
+      );
+    }
+
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 /* -------------------------------------------------------------------------- */
 /* CANCELAR INVITACIÓN                                                        */
 /* -------------------------------------------------------------------------- */
@@ -1168,6 +1410,7 @@ module.exports = {
   createSupportTeamInvitation,
   getSupportTeamInvitationByToken,
   acceptSupportTeamInvitation,
+  registerAndAcceptSupportTeamInvitation,
   cancelSupportTeamInvitation,
   removeSupportTeamMember,
 };

@@ -29,9 +29,7 @@ const normalizeText = (value) => {
 };
 
 const isStrongPassword = (password) => {
-  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(
-    String(password || ""),
-  );
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(String(password || ""));
 };
 
 const createResetToken = () => {
@@ -79,7 +77,7 @@ const register = async (req, res) => {
     if (!isStrongPassword(cleanPassword)) {
       return res.status(400).json({
         message:
-          "La contraseña debe tener al menos 8 caracteres e incluir mayúscula, minúscula y número."
+          "La contraseña debe tener al menos 8 caracteres e incluir mayúscula, minúscula y número.",
       });
     }
 
@@ -501,12 +499,21 @@ const forgotPassword = async (req, res) => {
       process.env.FRONTEND_URL || "http://localhost:5173"
     }/reset-password?token=${rawToken}`;
 
+    console.log("🔎 DEBUG RECUPERACIÓN CONTRASEÑA", {
+      emailIngresado: cleanEmail,
+      userEncontrado: Boolean(user),
+      userId: user?.id,
+      emailDestino: user?.email,
+      firstName: user?.firstName,
+      resetUrl,
+    });
+
     await sendPasswordResetEmail({
       to: user.email,
       firstName: user.firstName,
       resetUrl,
     });
-    
+
     const response = {
       ...genericResponse,
     };
@@ -648,5 +655,4 @@ module.exports = {
   forgotPassword,
   resetPassword,
   changePassword,
-  
 };

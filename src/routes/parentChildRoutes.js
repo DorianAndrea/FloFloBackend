@@ -10,6 +10,7 @@ const {
   linkChildToMe,
   getChildSupportTeam,
   createChildSupportTeamInvitation,
+  registerAndAcceptSupportTeamInvitation,
   getSupportTeamInvitation,
   acceptSupportTeamInvitation,
   cancelChildSupportTeamInvitation,
@@ -104,6 +105,11 @@ router.delete(
 router.get(
   "/team/invitations/:token",
   getSupportTeamInvitation,
+);
+
+router.post(
+  "/team/invitations/:token/register-and-accept",
+  registerAndAcceptSupportTeamInvitation,
 );
 
 router.post(
