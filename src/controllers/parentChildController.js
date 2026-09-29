@@ -33,6 +33,23 @@ const createChildProfile = async (req, res) => {
       });
     }
 
+    const associatedChildren =
+      await parentChildService.getChildrenByParent(parentId);
+
+    const caregiverRelationshipKeys = ["primary_caregiver", "caregiver"];
+
+    const hasAnyChildRelationship = associatedChildren.length > 0;
+
+    const hasCaregiverRelationship = associatedChildren.some((child) =>
+      caregiverRelationshipKeys.includes(child.relationship_key),
+    );
+
+    if (hasAnyChildRelationship && !hasCaregiverRelationship) {
+      return res.status(403).json({
+        message: "Solo una cuenta cuidadora puede crear perfiles infantiles",
+      });
+    }
+
     const firstName = String(req.body.firstName || "").trim();
     const lastName = String(req.body.lastName || "").trim();
     const birthDate = req.body.birthDate || null;
@@ -110,6 +127,7 @@ const linkChildToMe = async (req, res) => {
         message: "Solo una cuenta cuidadora puede asociar niños",
       });
     }
+
     const associatedChildren =
       await parentChildService.getChildrenByParent(parentId);
 
@@ -296,22 +314,6 @@ const acceptSupportTeamInvitation = async (req, res) => {
     if (req.user.role !== "parent") {
       return res.status(403).json({
         message: "La invitación debe aceptarse desde una cuenta adulta",
-      });
-    }
-    const associatedChildren =
-      await parentChildService.getChildrenByParent(parentId);
-
-    const caregiverRelationshipKeys = ["primary_caregiver", "caregiver"];
-
-    const hasAnyChildRelationship = associatedChildren.length > 0;
-
-    const hasCaregiverRelationship = associatedChildren.some((child) =>
-      caregiverRelationshipKeys.includes(child.relationship_key),
-    );
-
-    if (hasAnyChildRelationship && !hasCaregiverRelationship) {
-      return res.status(403).json({
-        message: "Solo una cuenta cuidadora puede crear perfiles infantiles",
       });
     }
 
