@@ -49,20 +49,10 @@ const sanitizeProfilePayload = (body) => ({
  * Todos los perfiles asociados pueden ver y editar el perfil sensorial.
  * En este módulo no se exige can_manage_team.
  */
-const getAdultChildAccess = async (
-  adultId,
-  childId,
-  client = pool,
-) => {
-  const cleanAdultId = validatePositiveInteger(
-    adultId,
-    "Adulto",
-  );
+const getAdultChildAccess = async (adultId, childId, client = pool) => {
+  const cleanAdultId = validatePositiveInteger(adultId, "Adulto");
 
-  const cleanChildId = validatePositiveInteger(
-    childId,
-    "Niño/a",
-  );
+  const cleanChildId = validatePositiveInteger(childId, "Niño/a");
 
   const result = await client.query(
     `
@@ -98,6 +88,28 @@ const getAdultChildAccess = async (
   return result.rows[0];
 };
 
+const assertCanEditSensoryProfile = (accessProfile, relationshipKey) => {
+  const allowedAccessProfiles = [
+    "caregiver",
+    "therapist",
+    "teacher",
+    "professional",
+  ];
+
+  const allowedRelationshipKeys = ["primary_caregiver", "caregiver"];
+
+  const canEdit =
+    allowedAccessProfiles.includes(accessProfile) ||
+    allowedRelationshipKeys.includes(relationshipKey);
+
+  if (!canEdit) {
+    throw createHttpError(
+      "No tienes permiso para editar el perfil sensorial de este niño/a",
+      403,
+    );
+  }
+};
+
 /*
  * Determina:
  *
@@ -106,14 +118,8 @@ const getAdultChildAccess = async (
  * accessProfile: categoría general de acceso.
  * relationshipKey: perfil específico del integrante.
  */
-const resolveSensoryProfileAccess = async (
-  req,
-  client = pool,
-) => {
-  const loggedUserId = validatePositiveInteger(
-    req.user.id,
-    "Usuario",
-  );
+const resolveSensoryProfileAccess = async (req, client = pool) => {
+  const loggedUserId = validatePositiveInteger(req.user.id, "Usuario");
 
   const childIdParam = req.params.childId;
 
@@ -141,10 +147,7 @@ const resolveSensoryProfileAccess = async (
   /*
    * Ruta utilizada por una cuenta adulta asociada.
    */
-  const childId = validatePositiveInteger(
-    childIdParam,
-    "Niño/a",
-  );
+  const childId = validatePositiveInteger(childIdParam, "Niño/a");
 
   if (req.user.role !== "parent") {
     throw createHttpError(
@@ -153,11 +156,7 @@ const resolveSensoryProfileAccess = async (
     );
   }
 
-  const access = await getAdultChildAccess(
-    loggedUserId,
-    childId,
-    client,
-  );
+  const access = await getAdultChildAccess(loggedUserId, childId, client);
 
   return {
     ownerId: childId,
@@ -172,10 +171,7 @@ const resolveSensoryProfileAccess = async (
 /*
  * Obtiene el perfil sensorial actual y los datos de autoría.
  */
-const getProfileByUserId = async (
-  userId,
-  client = pool,
-) => {
+const getProfileByUserId = async (userId, client = pool) => {
   const result = await client.query(
     `
     SELECT
@@ -305,10 +301,7 @@ const saveSensoryProfileHistory = async (
 /*
  * Obtiene el historial completo y el nombre de quien guardó cada versión.
  */
-const getSensoryProfileHistoryByUserId = async (
-  userId,
-  client = pool,
-) => {
+const getSensoryProfileHistoryByUserId = async (userId, client = pool) => {
   const result = await client.query(
     `
     SELECT
@@ -518,23 +511,16 @@ const saveOrUpdateSensoryProfile = async (
  */
 const getMySensoryProfile = async (req, res) => {
   try {
-    const {
-      ownerId,
-    } = await resolveSensoryProfileAccess(req);
+    const { ownerId } = await resolveSensoryProfileAccess(req);
 
     const profile = await getProfileByUserId(ownerId);
 
     return res.json(profile);
   } catch (error) {
-    console.error(
-      "Error obteniendo perfil sensorial:",
-      error,
-    );
+    console.error("Error obteniendo perfil sensorial:", error);
 
     return res.status(error.statusCode || 500).json({
-      message:
-        error.message ||
-        "Error obteniendo perfil sensorial",
+      message: error.message || "Error obteniendo perfil sensorial",
     });
   }
 };
@@ -548,27 +534,19 @@ const upsertMySensoryProfile = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const {
-      ownerId,
-      actorId,
-      accessProfile,
-      relationshipKey,
-    } = await resolveSensoryProfileAccess(
-      req,
-      client,
-    );
+    const { ownerId, actorId, accessProfile, relationshipKey } =
+      await resolveSensoryProfileAccess(req, client);
 
     const data = sanitizeProfilePayload(req.body);
 
-    const savedProfile =
-      await saveOrUpdateSensoryProfile(
-        client,
-        ownerId,
-        data,
-        actorId,
-        accessProfile,
-        relationshipKey,
-      );
+    const savedProfile = await saveOrUpdateSensoryProfile(
+      client,
+      ownerId,
+      data,
+      actorId,
+      accessProfile,
+      relationshipKey,
+    );
 
     await saveSensoryProfileHistory(
       client,
@@ -578,31 +556,18 @@ const upsertMySensoryProfile = async (req, res) => {
       relationshipKey,
     );
 
-    const completeProfile =
-      await getProfileByUserId(
-        ownerId,
-        client,
-      );
+    const completeProfile = await getProfileByUserId(ownerId, client);
 
     await client.query("COMMIT");
 
-    return res.status(200).json(
-      completeProfile,
-    );
+    return res.status(200).json(completeProfile);
   } catch (error) {
-    await client
-      .query("ROLLBACK")
-      .catch(() => {});
+    await client.query("ROLLBACK").catch(() => {});
 
-    console.error(
-      "Error guardando perfil sensorial:",
-      error,
-    );
+    console.error("Error guardando perfil sensorial:", error);
 
     return res.status(error.statusCode || 500).json({
-      message:
-        error.message ||
-        "Error guardando perfil sensorial",
+      message: error.message || "Error guardando perfil sensorial",
     });
   } finally {
     client.release();
@@ -616,23 +581,16 @@ const upsertMySensoryProfile = async (req, res) => {
  */
 const getChildSensoryProfile = async (req, res) => {
   try {
-    const {
-      ownerId,
-    } = await resolveSensoryProfileAccess(req);
+    const { ownerId } = await resolveSensoryProfileAccess(req);
 
     const profile = await getProfileByUserId(ownerId);
 
     return res.json(profile);
   } catch (error) {
-    console.error(
-      "Error obteniendo perfil sensorial del niño/a:",
-      error,
-    );
+    console.error("Error obteniendo perfil sensorial del niño/a:", error);
 
     return res.status(error.statusCode || 500).json({
-      message:
-        error.message ||
-        "Error obteniendo perfil sensorial del niño/a",
+      message: error.message || "Error obteniendo perfil sensorial del niño/a",
     });
   }
 };
@@ -642,36 +600,27 @@ const getChildSensoryProfile = async (req, res) => {
  *
  * Todos los perfiles adultos asociados pueden editar.
  */
-const upsertChildSensoryProfile = async (
-  req,
-  res,
-) => {
+const upsertChildSensoryProfile = async (req, res) => {
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
 
-    const {
-      ownerId,
-      actorId,
-      accessProfile,
-      relationshipKey,
-    } = await resolveSensoryProfileAccess(
-      req,
-      client,
-    );
+    const { ownerId, actorId, accessProfile, relationshipKey } =
+      await resolveSensoryProfileAccess(req, client);
+
+    assertCanEditSensoryProfile(accessProfile, relationshipKey);
 
     const data = sanitizeProfilePayload(req.body);
 
-    const savedProfile =
-      await saveOrUpdateSensoryProfile(
-        client,
-        ownerId,
-        data,
-        actorId,
-        accessProfile,
-        relationshipKey,
-      );
+    const savedProfile = await saveOrUpdateSensoryProfile(
+      client,
+      ownerId,
+      data,
+      actorId,
+      accessProfile,
+      relationshipKey,
+    );
 
     await saveSensoryProfileHistory(
       client,
@@ -681,31 +630,18 @@ const upsertChildSensoryProfile = async (
       relationshipKey,
     );
 
-    const completeProfile =
-      await getProfileByUserId(
-        ownerId,
-        client,
-      );
+    const completeProfile = await getProfileByUserId(ownerId, client);
 
     await client.query("COMMIT");
 
-    return res.status(200).json(
-      completeProfile,
-    );
+    return res.status(200).json(completeProfile);
   } catch (error) {
-    await client
-      .query("ROLLBACK")
-      .catch(() => {});
+    await client.query("ROLLBACK").catch(() => {});
 
-    console.error(
-      "Error guardando perfil sensorial del niño/a:",
-      error,
-    );
+    console.error("Error guardando perfil sensorial del niño/a:", error);
 
     return res.status(error.statusCode || 500).json({
-      message:
-        error.message ||
-        "Error guardando perfil sensorial del niño/a",
+      message: error.message || "Error guardando perfil sensorial del niño/a",
     });
   } finally {
     client.release();
@@ -715,31 +651,18 @@ const upsertChildSensoryProfile = async (
 /*
  * Historial del perfil sensorial propio.
  */
-const getMySensoryProfileHistory = async (
-  req,
-  res,
-) => {
+const getMySensoryProfileHistory = async (req, res) => {
   try {
-    const {
-      ownerId,
-    } = await resolveSensoryProfileAccess(req);
+    const { ownerId } = await resolveSensoryProfileAccess(req);
 
-    const history =
-      await getSensoryProfileHistoryByUserId(
-        ownerId,
-      );
+    const history = await getSensoryProfileHistoryByUserId(ownerId);
 
     return res.json(history);
   } catch (error) {
-    console.error(
-      "Error obteniendo historial sensorial propio:",
-      error,
-    );
+    console.error("Error obteniendo historial sensorial propio:", error);
 
     return res.status(error.statusCode || 500).json({
-      message:
-        error.message ||
-        "Error obteniendo historial sensorial",
+      message: error.message || "Error obteniendo historial sensorial",
     });
   }
 };
@@ -749,31 +672,19 @@ const getMySensoryProfileHistory = async (
  *
  * Todos los perfiles adultos asociados pueden verlo.
  */
-const getChildSensoryProfileHistory = async (
-  req,
-  res,
-) => {
+const getChildSensoryProfileHistory = async (req, res) => {
   try {
-    const {
-      ownerId,
-    } = await resolveSensoryProfileAccess(req);
+    const { ownerId } = await resolveSensoryProfileAccess(req);
 
-    const history =
-      await getSensoryProfileHistoryByUserId(
-        ownerId,
-      );
+    const history = await getSensoryProfileHistoryByUserId(ownerId);
 
     return res.json(history);
   } catch (error) {
-    console.error(
-      "Error obteniendo historial sensorial del niño/a:",
-      error,
-    );
+    console.error("Error obteniendo historial sensorial del niño/a:", error);
 
     return res.status(error.statusCode || 500).json({
       message:
-        error.message ||
-        "Error obteniendo historial sensorial del niño/a",
+        error.message || "Error obteniendo historial sensorial del niño/a",
     });
   }
 };
