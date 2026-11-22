@@ -110,8 +110,22 @@ const getAchievementsByUser = async (userId) => {
   return result.rows;
 };
 
+const getAchievementCountByChild = async (childId) => {
+  const result = await pool.query(
+    `
+    SELECT COUNT(*)::integer AS count
+    FROM "FloFlo".user_achievement
+    WHERE user_id = $1
+    `,
+    [Number(childId)],
+  );
+
+  return Number(result.rows[0]?.count || 0);
+};
+
 module.exports = {
   unlockAchievement,
   checkAndUnlockAchievements,
   getAchievementsByUser,
+  getAchievementCountByChild,
 };

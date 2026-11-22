@@ -1,7 +1,4 @@
 const pool = require("../database/db");
-const {
-  generateParentRecommendations,
-} = require("./parentRecommendationService");
 
 const validateUserId = (userId) => {
   const userIdNumber = Number(userId);
@@ -823,11 +820,14 @@ const getParentDashboard = async (userId) => {
   ]);
   const userInfo = await pool.query(
     `
-    SELECT "firstName", "lastName", email
-    FROM "FloFlo".user
-    WHERE id = $1
-    LIMIT 1
-    `,
+      SELECT
+        first_name AS "firstName",
+        last_name AS "lastName"
+      FROM "FloFlo".child_profile
+      WHERE id = $1
+        AND status = 'active'
+      LIMIT 1
+  `,
     [userIdNumber],
   );
 
@@ -860,28 +860,34 @@ const getParentDashboard = async (userId) => {
 
   const sensoryAlerts = buildSensoryAlerts(sensoryProfileData, dashboardData);
 
-  const wellnessStatus = buildWellnessStatus({
-    dashboardData,
-    sensoryProfile: sensoryProfileData,
-    sensoryAlerts,
-    emotionalTrendRows: emotionalTrend.rows,
-  });
+  const wellnessStatus = null;
 
-  const weeklySupportPlan = buildWeeklySupportPlan(
-    dashboardData,
-    sensoryProfileData,
+  const weeklyPlanResult = await pool.query(
+    `
+    SELECT
+      id,
+      child_id,
+      week_start,
+      title,
+      focus,
+      plan,
+      created_at,
+      updated_at
+    FROM "FloFlo".weekly_support_plan_history
+    WHERE child_id = $1
+      AND week_start = DATE_TRUNC(
+        'week',
+        NOW() AT TIME ZONE $2
+      )::date
+    LIMIT 1
+    `,
+    [userIdNumber, process.env.APP_TIMEZONE || "America/Santiago"],
   );
 
-  let weeklySupportPlanRecord = null;
+  const weeklySupportPlanRecord = getFirstRow(weeklyPlanResult);
 
-  try {
-    weeklySupportPlanRecord = await saveWeeklySupportPlanHistory(
-      userIdNumber,
-      weeklySupportPlan,
-    );
-  } catch (error) {
-    console.error("Error guardando historial del plan semanal:", error.message);
-  }
+  const weeklySupportPlan = weeklySupportPlanRecord?.plan || null;
+
   const alerts = [];
   alerts.push(...sensoryAlerts);
 
@@ -930,35 +936,7 @@ const getParentDashboard = async (userId) => {
     });
   }
 
-  let aiRecommendations = [];
-
-  try {
-    const generatedRecommendations = await generateParentRecommendations(
-      dashboardData,
-      {
-        sensoryProfile: sensoryProfileData,
-        alerts: sensoryAlerts,
-      },
-    );
-
-    aiRecommendations = Array.isArray(generatedRecommendations)
-      ? generatedRecommendations
-      : [];
-  } catch (error) {
-    console.error("Error generando recomendaciones IA:", error.message);
-
-    aiRecommendations = [
-      {
-        title: "Revisar avances",
-        message:
-          "Puedes revisar las emociones, rutinas y conversaciones recientes para elegir qué practicar esta semana.",
-        icon: "💡",
-      },
-    ];
-  }
-
-  const recommendations =
-    aiRecommendations.length > 0 ? aiRecommendations : sensoryRecommendations;
+  const recommendations = sensoryRecommendations;
 
   return {
     ...dashboardData,

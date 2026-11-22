@@ -15,11 +15,20 @@ const checkParentChildRelation = async (parentId, childId) => {
     `
     SELECT pc.child_id
     FROM "FloFlo".parent_child pc
+    INNER JOIN "FloFlo".child_profile cp
+      ON cp.id = pc.child_id
     INNER JOIN "FloFlo"."user" u
-      ON u.id = pc.child_id
+      ON u.id = pc.parent_id
     WHERE pc.parent_id = $1
       AND pc.child_id = $2
-      AND u.role = 'child'
+      AND pc.status = 'active'
+      AND cp.status = 'active'
+      AND u.is_active = true
+      AND u.role = 'parent'
+      AND pc.access_profile IN (
+        'primary_caregiver',
+        'caregiver'
+      )
     LIMIT 1
     `,
     [parentId, childId],
@@ -298,14 +307,34 @@ const getMyDashboard = async (req, res) => {
 
     const userId = req.user.id;
 
-    const dashboard = await getParentDashboard(userId);
+    const result = await pool.query(
+      `
+      SELECT id
+      FROM "FloFlo".child_profile
+      WHERE legacy_user_id = $1
+        AND status = 'active'
+      LIMIT 2
+      `,
+      [userId],
+    );
 
-    res.json(dashboard);
+    if (result.rows.length !== 1) {
+      return res.status(403).json({
+        message:
+          "No existe un perfil infantil activo asociado de forma única a esta cuenta",
+      });
+    }
+
+    const childId = result.rows[0].id;
+
+    const dashboard = await getParentDashboard(childId);
+
+    return res.json(dashboard);
   } catch (error) {
     console.error("Error obteniendo mi dashboard:", error);
 
-    res.status(error.statusCode || 500).json({
-      message: error.message || "Error obteniendo dashboard",
+    return res.status(500).json({
+      message: "Error obteniendo dashboard",
     });
   }
 };

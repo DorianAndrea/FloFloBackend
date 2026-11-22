@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
 const routineRoutes = require("./routes/routinesRoutes");
+const supportRoutes = require("./routes/supportRoutes");
 const moodRoutes = require("./routes/moodRoutes");
 const authRoutes = require("./routes/authRoutes");
 const contactRoutes = require("./routes/contactRoutes");
@@ -16,6 +17,7 @@ const achievementRoutes = require("./routes/achievementRoutes");
 const profileRoutes = require("./routes/profileRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const parentDashboardRoutes = require("./routes/parentDashboardRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes");
 const parentChildRoutes = require("./routes/parentChildRoutes");
 const sensoryProfileRoutes = require("./routes/sensoryProfileRoutes");
 const intelligentObservationRoutes = require("./routes/intelligentObservationRoutes");
@@ -63,6 +65,7 @@ app.use(express.json());
 app.use("/uploads", express.static("uploads"));
 
 app.use("/api/routines", routineRoutes);
+
 app.use("/api/moods", moodRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/contacts", contactRoutes);
@@ -77,6 +80,7 @@ app.use("/api/achievements", achievementRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/report", reportRoutes);
 app.use("/api/parent-dashboard", parentDashboardRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/parent-child", parentChildRoutes);
 app.use("/api/sensory-profile", sensoryProfileRoutes);
 app.use("/api/intelligent-observations", intelligentObservationRoutes);
@@ -86,6 +90,8 @@ app.use("/api/experience-templates", experienceTemplateRoutes);
 app.use("/api/experience-favorites", experienceFavoriteRoutes);
 app.use("/api/experience-recommendations", experienceRecommendationRoutes);
 app.use("/api/experience-recents", experienceRecentRoutes);
+app.use("/api/support", supportRoutes);
+
 
 app.get("/", (req, res) => {
   res.send("Backend FloFlo funcionando");

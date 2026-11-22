@@ -499,15 +499,6 @@ const forgotPassword = async (req, res) => {
       process.env.FRONTEND_URL || "http://localhost:5173"
     }/reset-password?token=${rawToken}`;
 
-    console.log("🔎 DEBUG RECUPERACIÓN CONTRASEÑA", {
-      emailIngresado: cleanEmail,
-      userEncontrado: Boolean(user),
-      userId: user?.id,
-      emailDestino: user?.email,
-      firstName: user?.firstName,
-      resetUrl,
-    });
-
     await sendPasswordResetEmail({
       to: user.email,
       firstName: user.firstName,
@@ -519,7 +510,7 @@ const forgotPassword = async (req, res) => {
     };
 
     if (
-      process.env.NODE_ENV !== "production" ||
+      process.env.NODE_ENV !== "production" &&
       process.env.ALLOW_RESET_TOKEN_RESPONSE === "true"
     ) {
       response.resetToken = rawToken;
@@ -535,7 +526,11 @@ const forgotPassword = async (req, res) => {
     });
   }
 };
+
 const resetPassword = async (req, res) => {
+  let dbClient;
+  let transactionStarted = false;
+
   try {
     const { token, newPassword } = req.body || {};
 
@@ -551,30 +546,37 @@ const resetPassword = async (req, res) => {
     if (!isStrongPassword(cleanPassword)) {
       return res.status(400).json({
         message:
-          "La nueva contraseña debe tener al menos 8 caracteres e incluir letras y números.",
+          "La nueva contraseña debe tener al menos 8 caracteres e incluir mayúscula, minúscula y número.",
       });
     }
 
     const tokenHash = hashResetToken(cleanToken);
 
-    const tokenResult = await pool.query(
+    // Reservar conexión e iniciar transacción
+    dbClient = await pool.connect();
+    await dbClient.query("BEGIN");
+    transactionStarted = true;
+
+    // Bloquear el token para evitar usos simultáneos
+    const tokenResult = await dbClient.query(
       `
       SELECT
-        prt.id,
-        prt.user_id,
-        prt.expires_at,
-        prt.used_at,
-        u.email
-      FROM "FloFlo".password_reset_token prt
-      JOIN "FloFlo"."user" u
-        ON u.id = prt.user_id
-      WHERE prt.token_hash = $1
-      LIMIT 1
+        id,
+        user_id,
+        expires_at,
+        used_at
+      FROM "FloFlo".password_reset_token
+      WHERE token_hash = $1
+      FOR UPDATE
       `,
       [tokenHash],
     );
 
+    // Token inexistente
     if (tokenResult.rows.length === 0) {
+      await dbClient.query("ROLLBACK");
+      transactionStarted = false;
+
       return res.status(400).json({
         message: "El enlace de recuperación no es válido",
       });
@@ -582,25 +584,34 @@ const resetPassword = async (req, res) => {
 
     const resetToken = tokenResult.rows[0];
 
+    // Token utilizado anteriormente
     if (resetToken.used_at) {
+      await dbClient.query("ROLLBACK");
+      transactionStarted = false;
+
       return res.status(400).json({
         message: "Este enlace de recuperación ya fue utilizado",
       });
     }
 
-    const isExpired = new Date(resetToken.expires_at).getTime() < Date.now();
+    // Token expirado
+    const isExpired =
+      new Date(resetToken.expires_at).getTime() <= Date.now();
 
     if (isExpired) {
+      await dbClient.query("ROLLBACK");
+      transactionStarted = false;
+
       return res.status(400).json({
         message: "El enlace de recuperación expiró",
       });
     }
 
+    // Cifrar la nueva contraseña
     const hashedPassword = await bcrypt.hash(cleanPassword, 10);
 
-    await pool.query("BEGIN");
-
-    await pool.query(
+    // Actualizar contraseña del usuario
+    const updateUserResult = await dbClient.query(
       `
       UPDATE "FloFlo"."user"
       SET
@@ -611,7 +622,12 @@ const resetPassword = async (req, res) => {
       [hashedPassword, resetToken.user_id],
     );
 
-    await pool.query(
+    if (updateUserResult.rowCount !== 1) {
+      throw new Error("No se pudo actualizar la contraseña del usuario");
+    }
+
+    // Marcar el token como utilizado
+    await dbClient.query(
       `
       UPDATE "FloFlo".password_reset_token
       SET used_at = NOW()
@@ -620,32 +636,53 @@ const resetPassword = async (req, res) => {
       [resetToken.id],
     );
 
-    await pool.query(
+    // Invalidar los demás tokens pendientes
+    await dbClient.query(
       `
       UPDATE "FloFlo".password_reset_token
       SET used_at = NOW()
       WHERE user_id = $1
-      AND used_at IS NULL
-      AND id <> $2
+        AND used_at IS NULL
+        AND id <> $2
       `,
       [resetToken.user_id, resetToken.id],
     );
 
-    await pool.query("COMMIT");
+    // Confirmar todos los cambios
+    await dbClient.query("COMMIT");
+    transactionStarted = false;
 
-    res.json({
+    return res.json({
       message: "Contraseña actualizada correctamente",
     });
+
   } catch (error) {
-    await pool.query("ROLLBACK").catch(() => {});
+    // Revertir cambios si ocurre un error
+    if (dbClient && transactionStarted) {
+      try {
+        await dbClient.query("ROLLBACK");
+      } catch (rollbackError) {
+        console.error(
+          "Error revirtiendo transacción de recuperación:",
+          rollbackError,
+        );
+      }
+    }
 
     console.error("Error restableciendo contraseña:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Error restableciendo contraseña",
     });
+
+  } finally {
+    // Liberar siempre la conexión
+    if (dbClient) {
+      dbClient.release();
+    }
   }
 };
+
 
 module.exports = {
   register,
