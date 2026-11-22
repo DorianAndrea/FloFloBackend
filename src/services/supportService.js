@@ -54,50 +54,77 @@ const validateSupportTypes = async (supportCodes, client = pool) => {
  * el creador real y parent_child activo. Si existen dos perfiles posibles,
  * no se elige uno arbitrariamente.
  */
-const resolveSupportPersonFromProgress = async ({
-  sourceModule,
-  sourceEntityType,
-  sourceEntityId,
-}, client = pool) => {
-  if (sourceModule !== "routines" || sourceEntityType !== "routine_step_progress") {
-    throw createHttpError("Contexto de observación no permitido", 400);
+
+const resolveSupportPersonFromProgress = async (
+  {
+    sourceModule,
+    sourceEntityType,
+    sourceEntityId,
+  },
+  client = pool
+) => {
+  if (
+    sourceModule !== "routines" ||
+    sourceEntityType !== "routine_step_progress"
+  ) {
+    throw createHttpError(
+      "Contexto de observación no permitido",
+      400
+    );
   }
+
   const progressId = Number(sourceEntityId);
-  if (!Number.isSafeInteger(progressId) || progressId <= 0) {
-    throw createHttpError("Identificador de progreso inválido", 400);
+
+  if (
+    !Number.isSafeInteger(progressId) ||
+    progressId <= 0
+  ) {
+    throw createHttpError(
+      "Identificador de progreso inválido",
+      400
+    );
   }
 
   const result = await client.query(
-    `SELECT DISTINCT cp.id AS person_id
-       FROM "FloFlo".routine_step_progress rsp
-       JOIN "FloFlo".routine r
-         ON r.id = rsp.routine_id AND r.user_id = rsp.user_id
-       JOIN "FloFlo".routine_step rs
-         ON rs.id = rsp.routine_step_id AND rs.routine_id = r.id
-       JOIN "FloFlo".child_profile cp
-         ON cp.status = 'active'
-        AND (cp.id = r.user_id OR cp.legacy_user_id = r.user_id)
-       JOIN "FloFlo".parent_child pc
-         ON pc.child_id = cp.id
-        AND pc.parent_id = r.created_by
-        AND pc.status = 'active'
-      WHERE rsp.id = $1
-        AND rsp.completed = TRUE`,
+    `
+    SELECT DISTINCT cp.id AS person_id
+    FROM "FloFlo".routine_step_progress rsp
+
+    INNER JOIN "FloFlo".routine r
+      ON r.id = rsp.routine_id
+     AND r.user_id = rsp.user_id
+
+    INNER JOIN "FloFlo".routine_step rs
+      ON rs.id = rsp.routine_step_id
+     AND rs.routine_id = r.id
+
+    INNER JOIN "FloFlo".child_profile cp
+      ON cp.status = 'active'
+     AND (
+       cp.id = r.user_id
+       OR cp.legacy_user_id = r.user_id
+     )
+
+    WHERE rsp.id = $1
+      AND rsp.completed = TRUE
+    `,
     [progressId]
   );
 
   if (result.rows.length === 0) {
     throw createHttpError(
-      "No se encontró una vinculación verificable entre el progreso y el perfil infantil",
+      "No se encontró un perfil infantil activo asociado al progreso",
       404
     );
   }
+
   if (result.rows.length !== 1) {
     throw createHttpError(
       "El progreso coincide con más de un perfil infantil; se requiere revisar la vinculación",
       409
     );
   }
+
   return Number(result.rows[0].person_id);
 };
 
